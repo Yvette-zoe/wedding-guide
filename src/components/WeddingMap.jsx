@@ -397,7 +397,8 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
     async function init() {
       try {
         setStatus('loading')
-        const response = await fetch('/maps/wedding_map.json')
+        const mapUrl = `${import.meta.env.BASE_URL}maps/wedding_map.json`
+        const response = await fetch(mapUrl)
         if (!response.ok) throw new Error('地图数据加载失败')
         const geoJson = await response.json()
         if (disposed || !containerRef.current) return
