@@ -1,6 +1,7 @@
 /**
  * DeepSeek Chat Completions 调用（含工具循环）
  */
+import { isGenericTripPlanning } from './planItinerary.js'
 import { buildPlacesSummary, loadPlacesCatalog } from './placesCatalog.js'
 import {
   buildSystemPrompt,
@@ -67,6 +68,20 @@ export async function runChat({ messages, env }) {
   const ctx = await createToolContext(env)
   const placesSummary = buildPlacesSummary(catalog.places)
 
+  const userMessages = messages.filter((m) => m.role === 'user')
+  const lastUserMessage = userMessages[userMessages.length - 1]?.content || ''
+
+  /** 泛化行程规划（如「帮我规划半日游」）直接走工具，避免 LLM 自行推荐苏马荡等远郊 */
+  const genericTripType = isGenericTripPlanning(lastUserMessage)
+  if (genericTripType) {
+    const toolOut = await executeTool('plan_itinerary', { trip_type: genericTripType }, ctx)
+    return {
+      reply: toolOut.itineraryReply || toolOut.result?.error || '行程规划失败，请稍后重试',
+      card: toolOut.card,
+      focusPlaceIds: toolOut.focusPlaceIds || [],
+    }
+  }
+
   const apiMessages = [
     { role: 'system', content: buildSystemPrompt(placesSummary) },
     ...messages.filter((m) => m.role === 'user' || m.role === 'assistant').map((m) => ({
@@ -77,6 +92,7 @@ export async function runChat({ messages, env }) {
 
   let lastCard = null
   let focusPlaceIds = []
+  let itineraryReply = null
   let round = 0
 
   while (round < MAX_TOOL_ROUNDS) {
@@ -99,7 +115,7 @@ export async function runChat({ messages, env }) {
     const toolCalls = message.tool_calls
     if (!toolCalls?.length) {
       return {
-        reply: message.content || '',
+        reply: itineraryReply || message.content || '',
         card: lastCard,
         focusPlaceIds,
       }
@@ -114,9 +130,10 @@ export async function runChat({ messages, env }) {
         args = {}
       }
 
-      const { result, card, focusPlaceIds: ids } = await executeTool(fn.name, args, ctx)
+      const { result, card, focusPlaceIds: ids, itineraryReply: planReply } = await executeTool(fn.name, args, ctx)
       if (card) lastCard = card
       if (ids?.length) focusPlaceIds = ids
+      if (fn.name === 'plan_itinerary' && planReply) itineraryReply = planReply
 
       apiMessages.push({
         role: 'tool',

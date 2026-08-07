@@ -19,6 +19,17 @@ const BUFFER_MIN = 30
 const DEFAULT_START = '09:00'
 const DEFAULT_PLAY_MIN = 120
 
+/** 半日游单程驾车上限（分钟），超过视为远郊不适合半日往返 */
+const HALF_DAY_MAX_ONE_WAY_MIN = 50
+
+const FAR_ATTRACTION_IDS = new Set(['sumadang', 'yumuzhai'])
+
+function isFarAttraction(attraction) {
+  if (FAR_ATTRACTION_IDS.has(attraction?.id)) return true
+  const text = `${attraction?.name || ''}${attraction?.title || ''}${attraction?.address || ''}`
+  return /苏马荡|鱼木寨|谋道/.test(text)
+}
+
 /** 终点为交通枢纽时，需预留的候车/值机时间（分钟） */
 const TRANSPORT_RESERVE = {
   transport: 40,
@@ -115,12 +126,22 @@ export async function planItinerary({
   }
 
   /** 半日/一日：选最优单点或双点组合 */
-  async function planSingleDay(maxStops) {
+  async function planSingleDay(maxStops, tripTypeForPlan, remainingBudget) {
     const evaluations = await Promise.all(attractions.map(evaluateSingle))
     evaluations.sort((a, b) => a.total - b.total)
 
+    /** 半日游仅保留近郊：单程 ≤50 分钟，且排除苏马荡/鱼木寨等远郊点 */
+    const candidates = tripTypeForPlan === 'half_day'
+      ? evaluations.filter(
+          (item) =>
+            !isFarAttraction(item.attraction)
+            && item.go.duration_min <= HALF_DAY_MAX_ONE_WAY_MIN
+            && item.back.duration_min <= HALF_DAY_MAX_ONE_WAY_MIN,
+        )
+      : evaluations
+
     // 尝试两个景点串联（仅一日游且 maxStops>=2）
-    if (maxStops >= 2) {
+    if (maxStops >= 2 && tripTypeForPlan !== 'half_day') {
       let bestPair = null
       for (let i = 0; i < evaluations.length; i += 1) {
         for (let j = 0; j < evaluations.length; j += 1) {
@@ -135,7 +156,7 @@ export async function planItinerary({
             ? await getRoute(b.coordinates, destination.coordinates, 'driving')
             : await getRoute(b.coordinates, origin.coordinates, 'driving')
           const total = leg1.duration_min + playA + BUFFER_MIN + mid.duration_min + playB + BUFFER_MIN + back.duration_min
-          if (total <= remaining && (!bestPair || total < bestPair.total)) {
+          if (total <= remainingBudget && (!bestPair || total < bestPair.total)) {
             bestPair = { a, b, leg1, mid, playA, playB, back, total }
           }
         }
@@ -145,14 +166,31 @@ export async function planItinerary({
       }
     }
 
-    const best = evaluations.find((item) => item.total <= remaining)
+    const best = candidates.find((item) => item.total <= remainingBudget)
     if (best) return { type: 'single', ...best }
 
-    const nearest = evaluations[0]
+    const nearestNear = candidates[0]
+    const nearestAny = evaluations[0]
+    const oneDayPick = evaluations.find((item) => item.total <= TRIP_BUDGET_MIN.one_day && !isFarAttraction(item.attraction))
+
+    let reason = `在${label}时间预算内，暂无合适近郊景点。`
+    if (nearestNear) {
+      reason = `近郊景点「${nearestNear.attraction.name}」往返约需 ${nearestNear.total} 分钟，超出${label}可用 ${remainingBudget} 分钟`
+    } else if (nearestAny && isFarAttraction(nearestAny.attraction)) {
+      reason = `「${nearestAny.attraction.name}」位于远郊，单程驾车约 ${nearestAny.go.duration_text}，不适合半日游`
+    }
+
     return {
       type: 'infeasible',
-      nearest,
-      reason: `最近候选「${nearest.attraction.name}」往返约需 ${nearest.total} 分钟，超出${label}可用 ${remaining} 分钟`,
+      nearest: nearestNear || nearestAny,
+      reason,
+      suggestion: tripTypeForPlan === 'half_day'
+        ? (oneDayPick
+            ? `半日游更推荐「${nearestNear?.attraction.name || oneDayPick.attraction.name || '腾龙洞'}」；苏马荡/鱼木寨等远郊景点建议安排一日游或两日游`
+            : '建议升级为一日游或两日游，或选择腾龙洞等城区近郊景点')
+        : (nearestNear
+            ? `可考虑改为游览「${nearestNear.attraction.name}」，或升级为更长行程`
+            : '建议缩短行程或选择更近景点'),
     }
   }
 
@@ -247,7 +285,7 @@ export async function planItinerary({
     planResult = await planTwoDay()
   } else {
     const maxStops = tripType === 'half_day' ? 1 : 2
-    planResult = await planSingleDay(maxStops)
+    planResult = await planSingleDay(maxStops, tripType, remaining)
   }
 
   // 组装单日出游步骤
@@ -336,10 +374,54 @@ export async function planItinerary({
     steps: [],
     placeIds: [origin.id],
     summary: planResult.reason,
-    suggestion: nearest
-      ? `可考虑改为游览「${nearest.attraction.name}」，或升级为一日游/两日游`
-      : '建议缩短行程或选择更近景点',
+    suggestion: planResult.suggestion
+      || (nearest
+        ? `可考虑改为游览「${nearest.attraction.name}」，或升级为一日游/两日游`
+        : '建议缩短行程或选择更近景点'),
   })
+}
+
+/** 从用户输入识别行程类型 */
+export function detectTripType(text) {
+  const input = String(text || '')
+  if (/两日游|2\s*日|两天|二日/.test(input)) return 'two_day'
+  if (/一日游|1\s*日|一天|全日/.test(input)) return 'one_day'
+  if (/半日|半天|半日游/.test(input)) return 'half_day'
+  return null
+}
+
+/**
+ * 是否为「泛化行程规划」请求（未点名具体远郊景点）
+ * 这类请求应直接走 plan_itinerary，避免 LLM 自行编造行程
+ */
+export function isGenericTripPlanning(text) {
+  const input = String(text || '')
+  const tripType = detectTripType(input)
+  if (!tripType) return null
+  // 宾客明确问某个远郊景点时，交给 LLM + 工具组合处理
+  if (/苏马荡|鱼木寨|谋道/.test(input)) return null
+  if (/规划|安排|推荐|怎么玩|行程|去哪|介绍一下/.test(input) || /(半日|一日|两)日游/.test(input)) {
+    return tripType
+  }
+  return null
+}
+
+/** 根据 plan_itinerary 结果生成可直接展示给宾客的回复文案 */
+export function formatItineraryReply(result) {
+  if (result?.error) return result.error
+
+  const assumptionLines = (result.assumptions || []).map((item) => `※ ${item}`)
+  if (!result.feasible) {
+    return [result.summary, result.suggestion, ...assumptionLines].filter(Boolean).join('\n\n')
+  }
+
+  const header = `已为您规划${result.label}：${result.summary}`
+  if (result.days?.length) {
+    return [header, ...assumptionLines, '详细分日安排见下方行程卡。'].filter(Boolean).join('\n\n')
+  }
+
+  const stepLines = (result.steps || []).map((item) => `${item.time}  ${item.label}`)
+  return [header, ...assumptionLines, '', ...stepLines].filter(Boolean).join('\n')
 }
 
 function buildItineraryResult(payload) {

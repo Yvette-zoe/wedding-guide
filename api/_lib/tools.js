@@ -10,7 +10,7 @@ import {
   parseRouteResult,
 } from './amap.js'
 import { loadPlacesCatalog, resolvePlaceByName } from './placesCatalog.js'
-import { buildItineraryCard, planItinerary } from './planItinerary.js'
+import { buildItineraryCard, formatItineraryReply, planItinerary } from './planItinerary.js'
 import { buildWeatherCard, queryWeather } from './weather.js'
 
 /** OpenAI 兼容格式的工具定义 */
@@ -363,6 +363,7 @@ export async function executeTool(name, args, ctx) {
       result: {
         feasible: result.feasible,
         trip_type: result.trip_type,
+        label: result.label,
         origin_name: result.origin_name,
         destination_name: result.destination_name,
         assumptions: result.assumptions,
@@ -373,6 +374,7 @@ export async function executeTool(name, args, ctx) {
       },
       card,
       focusPlaceIds: result.placeIds || [],
+      itineraryReply: formatItineraryReply(result),
     }
   }
 
@@ -406,8 +408,9 @@ export function buildSystemPrompt(placesSummary) {
 2. 天气必须调用 get_weather；若返回 source_type=climate_reference，必须在回复中明确写「气候参考，非预报」
 3. 只回答与本次婚礼、利川/恩施出行相关的问题；其他话题礼貌拒绝
 4. 回复使用简洁中文，适合手机阅读；必要时用分点列表
-5. 规划半日/一日/两日游时调用 plan_itinerary；若 feasible=false，如实告知并给出 suggestion
-6. 若宾客未确定起点或终点，每次只追问一个问题；可用默认值但须在回复中注明
+5. 规划半日/一日/两日游时必须调用 plan_itinerary，禁止自行编写时间表或推荐未经工具校验的景点；半日游不得推荐苏马荡、鱼木寨等远郊景点
+6. 若 plan_itinerary 返回 feasible=false，如实告知并给出 suggestion
+7. 若宾客未确定起点或终点，每次只追问一个问题；可用默认值但须在回复中注明
 
 ## 已知地点（名称与基本信息，不含坐标）
 ${placesSummary}
