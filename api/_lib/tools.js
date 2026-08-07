@@ -10,6 +10,8 @@ import {
   parseRouteResult,
 } from './amap.js'
 import { loadPlacesCatalog, resolvePlaceByName } from './placesCatalog.js'
+import { buildItineraryCard, planItinerary } from './planItinerary.js'
+import { buildWeatherCard, queryWeather } from './weather.js'
 
 /** OpenAI 兼容格式的工具定义 */
 export const CHAT_TOOLS = [
@@ -80,6 +82,42 @@ export const CHAT_TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'plan_itinerary',
+      description: '规划半日游/一日游/两日游行程。会校验真实车程与游玩时长是否来得及，不可行时会明确说明原因。起点/终点未说明时默认酒店。',
+      parameters: {
+        type: 'object',
+        properties: {
+          trip_type: {
+            type: 'string',
+            enum: ['half_day', 'one_day', 'two_day'],
+            description: 'half_day=约4小时，one_day=约8小时，two_day=约16小时',
+          },
+          origin_name: { type: 'string', description: '起点名称，默认酒店' },
+          destination_name: { type: 'string', description: '终点名称，默认返回酒店；若需赶高铁/飞机可设为利川站/恩施站等' },
+          start_time: { type: 'string', description: '出发时间，格式 HH:mm，默认 09:00' },
+        },
+        required: ['trip_type'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: '查询指定地点在指定日期的天气与穿衣建议。距查询日超过3天时返回气候参考（非预报），必须向宾客说明。',
+      parameters: {
+        type: 'object',
+        properties: {
+          place_name: { type: 'string', description: '地点名称，如"利川"、"腾龙洞"、"酒店"' },
+          date: { type: 'string', description: '日期 YYYY-MM-DD，默认婚礼日 2026-08-23' },
+        },
+        required: ['place_name'],
+      },
+    },
+  },
 ]
 
 function coordsToAmap(coords) {
@@ -112,6 +150,7 @@ export async function createToolContext(env) {
     places: catalog.places,
     defaultHotel: catalog.defaultHotel,
     amapKey: env.AMAP_KEY,
+    env,
     getRoute,
   }
 }
@@ -304,6 +343,53 @@ export async function executeTool(name, args, ctx) {
     }
   }
 
+  if (name === 'plan_itinerary') {
+    const result = await planItinerary({
+      trip_type: args.trip_type,
+      origin_name: args.origin_name,
+      destination_name: args.destination_name,
+      start_time: args.start_time,
+      places: ctx.places,
+      getRoute: ctx.getRoute,
+      defaultHotel: ctx.defaultHotel,
+    })
+
+    if (result.error) {
+      return { result: { error: result.error }, card: null, focusPlaceIds: [] }
+    }
+
+    const card = buildItineraryCard(result)
+    return {
+      result: {
+        feasible: result.feasible,
+        trip_type: result.trip_type,
+        origin_name: result.origin_name,
+        destination_name: result.destination_name,
+        assumptions: result.assumptions,
+        summary: result.summary,
+        suggestion: result.suggestion,
+        steps: result.steps,
+        days: result.days,
+      },
+      card,
+      focusPlaceIds: result.placeIds || [],
+    }
+  }
+
+  if (name === 'get_weather') {
+    const weather = await queryWeather({
+      placeName: args.place_name,
+      date: args.date,
+      places: ctx.places,
+      env: ctx.env,
+    })
+    return {
+      result: weather,
+      card: buildWeatherCard(weather),
+      focusPlaceIds: [],
+    }
+  }
+
   return { result: { error: `未知工具：${name}` }, card: null, focusPlaceIds: [] }
 }
 
@@ -316,10 +402,12 @@ export function buildSystemPrompt(placesSummary) {
 - 若宾客未确定起点或终点，每次只追问一个问题
 
 ## 硬性规则
-1. 所有距离、时长必须调用 get_route 或 get_reachable_places 获取，禁止自行估算或编造
-2. 只回答与本次婚礼、利川/恩施出行相关的问题；其他话题礼貌拒绝
-3. 回复使用简洁中文，适合手机阅读；必要时用分点列表
-4. 半日游约 4 小时、一日游约 8 小时、两日游约 16 小时；苏马荡/鱼木寨等远郊景点往返耗时长，需结合工具结果判断是否来得及
+1. 所有距离、时长必须调用 get_route、get_reachable_places 或 plan_itinerary 获取，禁止自行估算或编造
+2. 天气必须调用 get_weather；若返回 source_type=climate_reference，必须在回复中明确写「气候参考，非预报」
+3. 只回答与本次婚礼、利川/恩施出行相关的问题；其他话题礼貌拒绝
+4. 回复使用简洁中文，适合手机阅读；必要时用分点列表
+5. 规划半日/一日/两日游时调用 plan_itinerary；若 feasible=false，如实告知并给出 suggestion
+6. 若宾客未确定起点或终点，每次只追问一个问题；可用默认值但须在回复中注明
 
 ## 已知地点（名称与基本信息，不含坐标）
 ${placesSummary}
@@ -327,5 +415,7 @@ ${placesSummary}
 ## 工具使用提示
 - 问「A 到 B 多远/多久」→ get_route
 - 问「附近/步行 X 分钟有什么好吃的」→ get_reachable_places，category=restaurant，mode=walking
-- 问有哪些景点/餐厅/酒店 → get_places`
+- 问有哪些景点/餐厅/酒店 → get_places
+- 问半日游/一日游/两日游怎么安排 → plan_itinerary
+- 问天气/穿什么 → get_weather（婚礼日默认 2026-08-23）`
 }

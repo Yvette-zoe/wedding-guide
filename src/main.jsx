@@ -414,6 +414,79 @@ function AssistantCard({ card, places, onSelectPlace }) {
     )
   }
 
+  if (card.card_type === 'itinerary') {
+    return (
+      <>
+        <div className="card-heading">
+          <span>{card.feasible ? '行程推荐' : '行程提示'}</span>
+          <div className="flower">✿</div>
+        </div>
+        <h2>{card.title}</h2>
+        {card.summary && <p className="assistant-subtitle">{card.summary}</p>}
+        {card.assumptions?.map((text) => (
+          <p key={text} className="assistant-assumption">※ {text}</p>
+        ))}
+        {card.suggestion && !card.feasible && (
+          <div className="description">{card.suggestion}</div>
+        )}
+        {card.days?.length ? (
+          card.days.map((day) => (
+            <div key={day.day} className="itinerary-day">
+              <h3>{day.title}</h3>
+              {day.note && <p className="assistant-subtitle">{day.note}</p>}
+              <ol className="itinerary-steps">
+                {day.steps.map((item, index) => (
+                  <li key={`${day.day}-${index}`}>
+                    <time>{item.time}</time>
+                    <span>{item.label}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))
+        ) : (
+          <ol className="itinerary-steps">
+            {(card.steps || []).map((item, index) => (
+              <li key={index}>
+                <time>{item.time}</time>
+                <span>{item.label}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </>
+    )
+  }
+
+  if (card.card_type === 'weather') {
+    return (
+      <>
+        <div className="card-heading">
+          <span>天气参考</span>
+          <div className="flower">✿</div>
+        </div>
+        <h2>{card.title}</h2>
+        <p className={`weather-source ${card.source_type === 'climate_reference' ? 'is-climate' : ''}`}>
+          {card.source_label}
+        </p>
+        <InfoLine icon="◷" label="日期" value={card.date} />
+        <InfoLine icon="☼" label="白天" value={`${card.dayweather} ${card.daytemp}℃`} />
+        <InfoLine icon="☾" label="夜间" value={`${card.nightweather} ${card.nighttemp}℃`} />
+        {card.wind && <InfoLine icon="≈" label="风力" value={card.wind} />}
+        {card.note && card.source_type === 'climate_reference' && (
+          <div className="description">{card.note}</div>
+        )}
+        {card.tips?.length > 0 && (
+          <ul className="weather-tips">
+            {card.tips.map((tip) => (
+              <li key={tip}>{tip}</li>
+            ))}
+          </ul>
+        )}
+      </>
+    )
+  }
+
   return null
 }
 

@@ -9,7 +9,7 @@ import {
   executeTool,
 } from './tools.js'
 
-const MAX_TOOL_ROUNDS = 6
+const MAX_TOOL_ROUNDS = 8
 
 export class ChatApiError extends Error {
   constructor(message, statusCode = 500) {

@@ -93,6 +93,17 @@ h2 { margin: 0 0 6px; color: #424469; font-size: 23px; letter-spacing: 1px; font
 .assistant-place-list small { color: #8f82ac; font-size: 12px; line-height: 1.35; }
 .assistant-place-list em { color: #766f8d; font-size: 12px; font-style: normal; }
 
+.assistant-assumption { margin: 4px 0 0; color: #8f82ac; font-size: 12px; }
+.itinerary-day { margin-top: 10px; }
+.itinerary-day h3 { margin: 0 0 6px; color: #555b87; font-size: 14px; font-weight: 600; }
+.itinerary-steps { list-style: none; margin: 8px 0 0; padding: 0; border-left: 2px solid #e5ddeb; }
+.itinerary-steps li { position: relative; margin: 0 0 10px 12px; padding-left: 8px; font-size: 13px; line-height: 1.4; color: #5d5a78; }
+.itinerary-steps time { display: inline-block; min-width: 42px; margin-right: 6px; color: #8572ad; font-size: 12px; font-weight: 600; }
+
+.weather-source { margin: 0 0 8px; padding: 4px 8px; border-radius: 8px; background: #eef6ff; color: #4a7ba6; font-size: 11px; letter-spacing: .5px; }
+.weather-source.is-climate { background: #fff8e8; color: #9a7b3a; }
+.weather-tips { margin: 10px 0 0; padding: 8px 10px 8px 24px; border-radius: 10px; background: #f7f3f8; color: #5d5a78; font-size: 12px; line-height: 1.5; }
+
 /* 分类导航弹层 */
 .nav-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(45,42,65,.45); }
 .nav-panel { position: absolute; left: 0; top: 0; bottom: 0; width: 130px; padding: 20px 12px; background: #faf7f0; box-shadow: 4px 0 20px rgba(67,61,84,.2); }
