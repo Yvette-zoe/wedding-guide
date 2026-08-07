@@ -1,7 +1,12 @@
 /**
  * DeepSeek Chat Completions 调用（含工具循环）
  */
-import { isGenericTripPlanning } from './planItinerary.js'
+import {
+  buildItineraryCard,
+  checkHalfDayNamedAttraction,
+  formatItineraryReply,
+  isGenericTripPlanning,
+} from './planItinerary.js'
 import { buildPlacesSummary, loadPlacesCatalog } from './placesCatalog.js'
 import {
   buildSystemPrompt,
@@ -71,8 +76,23 @@ export async function runChat({ messages, env }) {
   const userMessages = messages.filter((m) => m.role === 'user')
   const lastUserMessage = userMessages[userMessages.length - 1]?.content || ''
 
+  /** 半日游 + 点名景点（如「半日游能去苏马荡吗」）→ 明确回答可行性与原因 */
+  const namedHalfDay = await checkHalfDayNamedAttraction({
+    text: lastUserMessage,
+    places: ctx.places,
+    getRoute: ctx.getRoute,
+    defaultHotel: ctx.defaultHotel,
+  })
+  if (namedHalfDay && !namedHalfDay.error) {
+    return {
+      reply: formatItineraryReply(namedHalfDay),
+      card: buildItineraryCard(namedHalfDay),
+      focusPlaceIds: namedHalfDay.placeIds || [],
+    }
+  }
+
   /** 泛化行程规划（如「帮我规划半日游」）直接走工具，避免 LLM 自行推荐苏马荡等远郊 */
-  const genericTripType = isGenericTripPlanning(lastUserMessage)
+  const genericTripType = isGenericTripPlanning(lastUserMessage, ctx.places)
   if (genericTripType) {
     const toolOut = await executeTool('plan_itinerary', { trip_type: genericTripType }, ctx)
     return {

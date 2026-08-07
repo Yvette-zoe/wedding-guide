@@ -420,5 +420,6 @@ ${placesSummary}
 - 问「附近/步行 X 分钟有什么好吃的」→ get_reachable_places，category=restaurant，mode=walking
 - 问有哪些景点/餐厅/酒店 → get_places
 - 问半日游/一日游/两日游怎么安排 → plan_itinerary
+- 问「半日游能去某景点吗」→ 会由系统直接校验该景点是否来得及；你只需补充说明，勿与工具结论矛盾
 - 问天气/穿什么 → get_weather（婚礼日默认 2026-08-23）`
 }

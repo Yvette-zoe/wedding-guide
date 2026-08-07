@@ -61,6 +61,217 @@ function step(time, label, extra = {}) {
   return { time, label, ...extra }
 }
 
+/** 计算单景点往返时间与总耗时 */
+async function evaluateAttractionRoundTrip({ attraction, origin, destination, getRoute }) {
+  const go = await getRoute(origin.coordinates, attraction.coordinates, 'driving')
+  const back = destination?.coordinates && destination.id !== origin.id
+    ? await getRoute(attraction.coordinates, destination.coordinates, 'driving')
+    : await getRoute(attraction.coordinates, origin.coordinates, 'driving')
+  const play = parsePlayMinutes(attraction.details)
+  const total = go.duration_min + play + BUFFER_MIN + back.duration_min
+  return { attraction, go, back, play, total }
+}
+
+/** 判断半日游是否可行（远郊 + 单程时长 + 总预算） */
+function getHalfDayInfeasibleReasons(evaluation, remainingBudget) {
+  const { attraction, go, back, total } = evaluation
+  const reasons = []
+
+  if (isFarAttraction(attraction)) {
+    reasons.push(`「${attraction.name}」位于远郊（谋道镇一线），不适合半日往返`)
+  }
+  if (go.duration_min > HALF_DAY_MAX_ONE_WAY_MIN || back.duration_min > HALF_DAY_MAX_ONE_WAY_MIN) {
+    reasons.push(
+      `单程驾车 ${go.duration_text}（去）/ ${back.duration_text}（返），超过半日游建议的单程 ${HALF_DAY_MAX_ONE_WAY_MIN} 分钟`,
+    )
+  }
+  if (total > remainingBudget) {
+    reasons.push(`往返加游览约 ${total} 分钟，超出半日可用 ${remainingBudget} 分钟`)
+  }
+
+  return reasons
+}
+
+/** 从用户问题中识别被点名的景点（取最长匹配，避免歧义） */
+export function findAttractionMentionedInText(text, places) {
+  const input = String(text || '')
+  const attractions = places.filter((p) => p.placeType === 'attraction')
+  let best = null
+  let bestLen = 0
+
+  for (const attraction of attractions) {
+    const names = [attraction.name, attraction.title, ...(attraction.aliases || [])]
+      .filter((name) => name && name.length >= 2)
+    for (const name of names) {
+      if (input.includes(name) && name.length > bestLen) {
+        best = attraction
+        bestLen = name.length
+      }
+    }
+  }
+
+  return best
+}
+
+/** 半日游 + 点名具体景点 → 返回该景点对象，否则 null */
+export function detectHalfDayNamedAttractionQuery(text, places) {
+  if (detectTripType(text) !== 'half_day') return null
+  return findAttractionMentionedInText(text, places)
+}
+
+/** 在半日游候选里找可替代的近郊景点 */
+async function findHalfDayAlternative({ origin, destination, places, getRoute, remainingBudget, excludeId }) {
+  const attractions = places.filter((p) => p.placeType === 'attraction' && p.coordinates?.length === 2)
+  const evaluations = []
+
+  for (const attraction of attractions) {
+    if (attraction.id === excludeId || isFarAttraction(attraction)) continue
+    const evaluation = await evaluateAttractionRoundTrip({ attraction, origin, destination, getRoute })
+    if (evaluation.go.duration_min > HALF_DAY_MAX_ONE_WAY_MIN) continue
+    if (evaluation.back.duration_min > HALF_DAY_MAX_ONE_WAY_MIN) continue
+    if (evaluation.total <= remainingBudget) evaluations.push(evaluation)
+  }
+
+  evaluations.sort((a, b) => a.total - b.total)
+  return evaluations[0]?.attraction || null
+}
+
+/** 组装单景点半日游时间轴 */
+function buildSingleAttractionSteps({
+  origin,
+  destination,
+  attraction,
+  go,
+  back,
+  play,
+  startTime = DEFAULT_START,
+}) {
+  const steps = [step(startTime, `从${origin.name}出发`, { place_id: origin.id, type: 'start' })]
+  let timeCursor = startTime
+
+  timeCursor = addMinutes(timeCursor, go.duration_min)
+  steps.push(step(timeCursor, `抵达${attraction.name}（${go.duration_text}）`, {
+    place_id: attraction.id,
+    duration_text: go.duration_text,
+  }))
+  timeCursor = addMinutes(timeCursor, play)
+  steps.push(step(timeCursor, `游览${attraction.name}（建议 ${Math.round(play / 60 * 10) / 10} 小时）`, {
+    place_id: attraction.id,
+  }))
+  timeCursor = addMinutes(timeCursor, BUFFER_MIN + back.duration_min)
+  const endLabel = destination?.id !== origin.id ? destination.name : origin.name
+  steps.push(step(timeCursor, `抵达${endLabel}（${back.duration_text}）`, {
+    place_id: destination?.id || origin.id,
+    duration_text: back.duration_text,
+  }))
+
+  return {
+    steps,
+    placeIds: [origin.id, attraction.id, destination?.id || origin.id],
+  }
+}
+
+/**
+ * 半日游 + 点名景点：明确回答「可以/不行」及原因（基于高德真实车程）
+ */
+export async function checkHalfDayNamedAttraction({
+  text,
+  places,
+  getRoute,
+  defaultHotel,
+  origin_name: originName,
+  destination_name: destinationName,
+  start_time: startTime,
+}) {
+  const attraction = detectHalfDayNamedAttractionQuery(text, places)
+  if (!attraction?.coordinates) return null
+
+  const label = TRIP_LABEL.half_day
+  const assumptions = []
+  const origin = resolvePlaceByName(originName || '酒店', places) || defaultHotel
+  const destination = destinationName
+    ? resolvePlaceByName(destinationName, places)
+    : defaultHotel
+
+  if (!origin?.coordinates) {
+    return { feasible: false, error: `未找到起点「${originName || '酒店'}」` }
+  }
+
+  if (!originName) assumptions.push(`起点默认：${origin.name}`)
+  if (!destinationName) assumptions.push(`终点默认：${destination.name}`)
+  else if (destinationName && destination?.name) assumptions.push(`终点：${destination.name}`)
+
+  let remaining = TRIP_BUDGET_MIN.half_day
+  if (destination?.coordinates && destination.id !== origin.id) {
+    const toDest = await getRoute(origin.coordinates, destination.coordinates, 'driving')
+    const returnLegMin = toDest.duration_min + getTransportReserve(destination)
+    remaining -= returnLegMin
+    if (returnLegMin > 0) {
+      assumptions.push(`已预留返回${destination.name}车程 ${toDest.duration_text} + 候车/值机缓冲`)
+    }
+  }
+
+  const evaluation = await evaluateAttractionRoundTrip({
+    attraction,
+    origin,
+    destination,
+    getRoute,
+  })
+  const reasons = getHalfDayInfeasibleReasons(evaluation, remaining)
+
+  if (reasons.length) {
+    const alternative = await findHalfDayAlternative({
+      origin,
+      destination,
+      places,
+      getRoute,
+      remainingBudget: remaining,
+      excludeId: attraction.id,
+    })
+
+    const suggestion = alternative
+      ? `建议将「${attraction.name}」安排为一日游或两日游；半日游更推荐「${alternative.name}」等近郊景点`
+      : `建议将「${attraction.name}」安排为一日游或两日游，或选择腾龙洞等城区近郊景点`
+
+    return buildItineraryResult({
+      feasible: false,
+      tripType: 'half_day',
+      label,
+      origin,
+      destination,
+      assumptions,
+      steps: [],
+      placeIds: [origin.id, attraction.id],
+      summary: `不行，半日游不适合去「${attraction.name}」。${reasons.join('；')}`,
+      suggestion,
+      target_attraction_name: attraction.name,
+    })
+  }
+
+  const { steps, placeIds } = buildSingleAttractionSteps({
+    origin,
+    destination,
+    attraction,
+    go: evaluation.go,
+    back: evaluation.back,
+    play: evaluation.play,
+    startTime: startTime || DEFAULT_START,
+  })
+
+  return buildItineraryResult({
+    feasible: true,
+    tripType: 'half_day',
+    label,
+    origin,
+    destination,
+    assumptions,
+    steps,
+    placeIds,
+    summary: `可以，半日游来得及去「${attraction.name}」（往返加游览约 ${evaluation.total} 分钟）`,
+    target_attraction_name: attraction.name,
+  })
+}
+
 /**
  * 规划行程
  * @param {{ trip_type, origin_name?, destination_name?, start_time?, places, getRoute, defaultHotel }} options
@@ -116,13 +327,7 @@ export async function planItinerary({
 
   /** 计算单景点往返是否可行 */
   async function evaluateSingle(attraction) {
-    const go = await getRoute(origin.coordinates, attraction.coordinates, 'driving')
-    const back = destination?.coordinates && destination.id !== origin.id
-      ? await getRoute(attraction.coordinates, destination.coordinates, 'driving')
-      : await getRoute(attraction.coordinates, origin.coordinates, 'driving')
-    const play = parsePlayMinutes(attraction.details)
-    const total = go.duration_min + play + BUFFER_MIN + back.duration_min
-    return { attraction, go, back, play, total, totalWithReturn: total }
+    return evaluateAttractionRoundTrip({ attraction, origin, destination, getRoute })
   }
 
   /** 半日/一日：选最优单点或双点组合 */
@@ -291,22 +496,17 @@ export async function planItinerary({
   // 组装单日出游步骤
   if (planResult.type === 'single') {
     const { attraction, go, back, play } = planResult
-    timeCursor = addMinutes(timeCursor, go.duration_min)
-    steps.push(step(timeCursor, `抵达${attraction.name}（${go.duration_text}）`, {
-      place_id: attraction.id,
-      duration_text: go.duration_text,
-    }))
-    timeCursor = addMinutes(timeCursor, play)
-    steps.push(step(timeCursor, `游览${attraction.name}（建议 ${Math.round(play / 60 * 10) / 10} 小时）`, {
-      place_id: attraction.id,
-    }))
-    timeCursor = addMinutes(timeCursor, BUFFER_MIN + back.duration_min)
-    const endLabel = destination?.id !== origin.id ? destination.name : origin.name
-    steps.push(step(timeCursor, `抵达${endLabel}（${back.duration_text}）`, {
-      place_id: destination?.id || origin.id,
-      duration_text: back.duration_text,
-    }))
-    placeIds.push(attraction.id, destination?.id || origin.id)
+    const built = buildSingleAttractionSteps({
+      origin,
+      destination,
+      attraction,
+      go,
+      back,
+      play,
+      startTime: timeCursor,
+    })
+    steps.push(...built.steps.slice(1))
+    placeIds.push(...built.placeIds.slice(1))
 
     return buildItineraryResult({
       feasible: true,
@@ -391,15 +591,17 @@ export function detectTripType(text) {
 }
 
 /**
- * 是否为「泛化行程规划」请求（未点名具体远郊景点）
+ * 是否为「泛化行程规划」请求（未点名具体景点）
  * 这类请求应直接走 plan_itinerary，避免 LLM 自行编造行程
+ * @param {string} text
+ * @param {Array} [places] 地点列表，用于判断是否点名景点
  */
-export function isGenericTripPlanning(text) {
+export function isGenericTripPlanning(text, places = []) {
   const input = String(text || '')
   const tripType = detectTripType(input)
   if (!tripType) return null
-  // 宾客明确问某个远郊景点时，交给 LLM + 工具组合处理
-  if (/苏马荡|鱼木寨|谋道/.test(input)) return null
+  // 半日游且点名具体景点时，由 checkHalfDayNamedAttraction 专门处理
+  if (tripType === 'half_day' && findAttractionMentionedInText(input, places)) return null
   if (/规划|安排|推荐|怎么玩|行程|去哪|介绍一下/.test(input) || /(半日|一日|两)日游/.test(input)) {
     return tripType
   }
@@ -413,6 +615,12 @@ export function formatItineraryReply(result) {
   const assumptionLines = (result.assumptions || []).map((item) => `※ ${item}`)
   if (!result.feasible) {
     return [result.summary, result.suggestion, ...assumptionLines].filter(Boolean).join('\n\n')
+  }
+
+  // 点名景点的半日游可行性问答：summary 已是「可以/不行」结论，不再套「已为您规划」
+  if (result.target_attraction_name) {
+    const stepLines = (result.steps || []).map((item) => `${item.time}  ${item.label}`)
+    return [result.summary, ...assumptionLines, ...(stepLines.length ? ['', ...stepLines] : [])].filter(Boolean).join('\n')
   }
 
   const header = `已为您规划${result.label}：${result.summary}`
@@ -434,9 +642,16 @@ function buildItineraryResult(payload) {
 }
 
 export function buildItineraryCard(result) {
-  const title = result.feasible
-    ? `利川${result.label}推荐`
-    : `${result.label}暂不可行`
+  let title
+  if (result.target_attraction_name && !result.feasible) {
+    title = `半日游不适合去${result.target_attraction_name}`
+  } else if (result.target_attraction_name && result.feasible) {
+    title = `半日游可以去${result.target_attraction_name}`
+  } else {
+    title = result.feasible
+      ? `利川${result.label}推荐`
+      : `${result.label}暂不可行`
+  }
 
   return {
     card_type: 'itinerary',

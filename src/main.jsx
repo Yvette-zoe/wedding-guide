@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import WeddingMap from './components/WeddingMap'
+import ChatHistoryPage from './components/ChatHistoryPage'
 import { buildAmapNavigationUrl, loadCozePlaces, loadDrivingDuration } from './data/poiProvider'
 import { sendChatMessage } from './data/chatClient'
 import { attractionList, defaultHotel, mapPlaces, transportHubs, weddingVenue } from './data/places'
@@ -26,7 +27,7 @@ function App() {
   const [navOpen, setNavOpen] = useState(false)
   const [listPage, setListPage] = useState(null)
   const [detailPlace, setDetailPlace] = useState(null)
-  const pageEnd = useRef(null)
+  const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
   const mapRef = useRef(null)
 
   const hideQuickPicks = () => setShowQuickPicks(false)
@@ -123,6 +124,7 @@ function App() {
     setChatMessages(nextMessages)
     setInput('')
     setChatLoading(true)
+    setAssistantCard(null)
 
     try {
       const history = nextMessages.map(({ role, content }) => ({ role, content }))
@@ -145,116 +147,120 @@ function App() {
   }
 
   useEffect(() => {
-    pageEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [loading, card, chatMessages, chatLoading, assistantCard])
+    if (!chatHistoryOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [chatHistoryOpen])
 
   return (
     <main className="page-shell">
       <section className="app">
-        <header className="topbar">
-          <div className="topbar-left">
-            <button
-              className="nav-toggle"
-              type="button"
-              aria-label="打开分类导航"
-              onClick={() => setNavOpen(true)}
-            >
-              <span></span><span></span><span></span>
-            </button>
-            <div>
-              <p className="eyebrow">WELCOME TO OUR WEDDING</p>
-              <h1>婚礼指南</h1>
+        <div className="app-top">
+          <header className="topbar">
+            <div className="topbar-left">
+              <button
+                className="nav-toggle"
+                type="button"
+                aria-label="打开分类导航"
+                onClick={() => setNavOpen(true)}
+              >
+                <span></span><span></span><span></span>
+              </button>
+              <div>
+                <p className="eyebrow">WELCOME TO OUR WEDDING</p>
+                <h1>婚礼指南</h1>
+              </div>
             </div>
-          </div>
-          <div className="wedding-date">
-            <span>婚礼时间</span>
-            <strong>2026.08.23</strong>
-          </div>
-        </header>
+            <div className="wedding-date">
+              <span>婚礼时间</span>
+              <strong>2026.08.23</strong>
+            </div>
+          </header>
 
-        <div className="intro">
-          <span className="sparkle">✦</span>
-          <p>与山水相约 · 共赴浪漫之宴</p>
-          <span className="sparkle">✦</span>
+          <div className="intro">
+            <span className="sparkle">✦</span>
+            <p>与山水相约 · 共赴浪漫之宴</p>
+            <span className="sparkle">✦</span>
+          </div>
         </div>
 
-        <section className="map-section" aria-label="利川及恩施景点地图">
-          <div className="map-title">
-            <span>婚礼周边地图</span>
-            <small>
-              {placesStatus === 'loading' ? '地点数据加载中…' : '点击地点查看详情'}
-            </small>
-          </div>
-          <WeddingMap
-            ref={mapRef}
-            places={places}
-            focusPlaceId={focusPlaceId}
-            onSelectPlace={(place) => selectPlace(place, { focus: Boolean(place?.coordinates) })}
-          />
-        </section>
-
-        {chatMessages.length > 0 && (
-          <section className="chat-thread" aria-label="对话记录">
-            {chatMessages.map((message, index) => (
-              <div key={`${message.role}-${index}`} className={`chat-bubble is-${message.role}`}>
-                <small>{message.role === 'user' ? '我' : '婚礼助手'}</small>
-                <p>{message.content}</p>
-              </div>
-            ))}
-          </section>
-        )}
-
-        <section className={`info-card ${loading || chatLoading ? 'is-loading' : ''}`}>
-          {loading || chatLoading ? (
-            <div className="loading-state"><span></span><span></span><span></span><p>{chatLoading ? '助手思考中…' : '正在查询…'}</p></div>
-          ) : assistantCard ? (
-            <AssistantCard
-              card={assistantCard}
+        <div className="app-body">
+          <section className="map-section" aria-label="利川及恩施景点地图">
+            <div className="map-title">
+              <span>婚礼周边地图</span>
+              <small>
+                {placesStatus === 'loading' ? '地点数据加载中…' : '点击地点查看详情'}
+              </small>
+            </div>
+            <WeddingMap
+              ref={mapRef}
               places={places}
-              onSelectPlace={(place) => selectPlace(place)}
+              focusPlaceId={focusPlaceId}
+              onSelectPlace={(place) => selectPlace(place, { focus: Boolean(place?.coordinates) })}
             />
-          ) : (
-            <>
-              <div className="card-heading">
-                <span>{card.type}</span>
-                <div className="flower">✿</div>
+            {showQuickPicks && (
+              <div className="quick-picks" aria-label="推荐旅游地点">
+                {attractionList.map((place) => (
+                  <button key={place.id} type="button" onClick={() => selectPlace(place, { hidePicks: true })}>
+                    <span>⌁</span>{place.name}
+                  </button>
+                ))}
               </div>
-              <div className="card-title-row">
-                <h2>{card.title}</h2>
-                {card.coordinates?.length === 2 && (
-                  <a
-                    className="nav-btn"
-                    href={buildAmapNavigationUrl(card)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    高德导航
-                  </a>
-                )}
-              </div>
-              <InfoLine icon="⌖" label="地址" value={card.address} />
-              {card.placeType === 'transport' ? (
-                <InfoLine icon="◷" label="距酒店驾车" value={card.drivingDuration || '查询中…'} />
+            )}
+          </section>
+
+          <section className="info-card-panel" aria-label="信息卡片">
+            <div className={`info-card ${loading || chatLoading ? 'is-loading' : ''}`}>
+              {loading || chatLoading ? (
+                <div className="loading-state"><span></span><span></span><span></span><p>{chatLoading ? '正在思考中…' : '正在查询…'}</p></div>
+              ) : assistantCard ? (
+                <AssistantCard
+                  card={assistantCard}
+                  places={places}
+                  onSelectPlace={(place) => selectPlace(place)}
+                  compact
+                />
               ) : (
                 <>
-                  <InfoLine icon="◷" label="时间" value={card.time} />
-                  <InfoLine icon="♡" label="推荐" value={card.details} />
+                  <div className="info-card-fixed">
+                    <div className="card-heading">
+                      <span>{card.type}</span>
+                      <div className="flower" aria-hidden="true"></div>
+                    </div>
+                    <div className="card-title-row">
+                      <h2>{card.title}</h2>
+                      {card.coordinates?.length === 2 && (
+                        <a
+                          className="nav-btn"
+                          href={buildAmapNavigationUrl(card)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          高德导航
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div className="info-card-scroll">
+                    <InfoLine icon="⌖" label="地址" value={card.address} />
+                    {card.placeType === 'transport' ? (
+                      <InfoLine icon="◷" label="距酒店驾车" value={card.drivingDuration || '查询中…'} />
+                    ) : (
+                      <>
+                        <InfoLine icon="◷" label="时间" value={card.time} />
+                        <InfoLine icon="♡" label="推荐" value={card.details} />
+                      </>
+                    )}
+                    <div className="description">{card.description}</div>
+                  </div>
                 </>
               )}
-              <div className="description">{card.description}</div>
-            </>
-          )}
-        </section>
-
-        {showQuickPicks && (
-          <section className="quick-picks" aria-label="推荐旅游地点">
-            {attractionList.map((place) => (
-              <button key={place.id} onClick={() => selectPlace(place, { hidePicks: true })}>
-                <span>⌁</span>{place.name}
-              </button>
-            ))}
+            </div>
           </section>
-        )}
+        </div>
 
         <form className="chat-bar" onSubmit={(event) => { event.preventDefault(); send() }}>
           <input
@@ -264,12 +270,43 @@ function App() {
             aria-label="输入旅游问题"
             disabled={chatLoading}
           />
-          <button type="submit" aria-label="发送" disabled={chatLoading || !input.trim()}>
+          <button type="submit" className="chat-send-btn" aria-label="发送" disabled={chatLoading || !input.trim()}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4 3.3 13.9 20c-.3.7-1.3.7-1.6 0l-2.1-5.3-5.3-2.1c-.7-.3-.7-1.3 0-1.6L20.7 2c.6-.3 1 .6.7 1.3Z" /><path d="m10.1 14.6 4.7-4.7" /></svg>
           </button>
+          <button
+            type="button"
+            className={`chat-history-btn${chatMessages.length ? ' has-history' : ''}`}
+            aria-label="历史对话"
+            onClick={() => setChatHistoryOpen(true)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+          </button>
         </form>
-        <div ref={pageEnd}></div>
       </section>
+
+      {chatHistoryOpen && (
+        <ChatHistoryPage
+          messages={chatMessages}
+          chatLoading={chatLoading}
+          input={input}
+          onInputChange={setInput}
+          onSend={send}
+          onClose={() => setChatHistoryOpen(false)}
+          renderAssistantCard={(card) => (
+            <AssistantCard
+              card={card}
+              places={places}
+              onSelectPlace={(place) => {
+                setChatHistoryOpen(false)
+                selectPlace(place)
+              }}
+            />
+          )}
+        />
+      )}
 
       {navOpen && (
         <div className="nav-overlay" onClick={() => setNavOpen(false)}>
@@ -325,7 +362,7 @@ function App() {
             <button type="button" className="detail-close" onClick={closeDetail}>×</button>
             <div className="card-heading">
               <span>{detailPlace.type}</span>
-              <div className="flower">✿</div>
+              <div className="flower" aria-hidden="true"></div>
             </div>
             <h2>{detailPlace.title}</h2>
             <InfoLine icon="⌖" label="地址" value={detailPlace.address} />
@@ -363,30 +400,32 @@ function InfoLine({ icon, label, value }) {
   </div>
 }
 
-/** 助手返回的结构化卡片（路程 / 地点列表） */
-function AssistantCard({ card, places, onSelectPlace }) {
+/** 助手返回的结构化卡片（路程 / 地点列表 / 行程 / 天气）；compact 用于首页紧凑信息卡 */
+function AssistantCard({ card, places, onSelectPlace, compact = false }) {
+  const wrapClass = compact ? 'assistant-card-compact' : ''
+
   if (card.card_type === 'route') {
     return (
-      <>
+      <div className={wrapClass}>
         <div className="card-heading">
           <span>{card.mode_label || '路程'}查询</span>
-          <div className="flower">✿</div>
+          <div className="flower" aria-hidden="true"></div>
         </div>
         <h2>{card.title}</h2>
         <InfoLine icon="◎" label="起点" value={card.origin_name} />
         <InfoLine icon="◎" label="终点" value={card.destination_name} />
         <InfoLine icon="⌁" label="距离" value={card.distance_text} />
         <InfoLine icon="◷" label="时长" value={card.duration_text} />
-      </>
+      </div>
     )
   }
 
   if (card.card_type === 'place_list') {
     return (
-      <>
+      <div className={wrapClass}>
         <div className="card-heading">
           <span>推荐列表</span>
-          <div className="flower">✿</div>
+          <div className="flower" aria-hidden="true"></div>
         </div>
         <h2>{card.title}</h2>
         {card.subtitle && <p className="assistant-subtitle">{card.subtitle}</p>}
@@ -410,16 +449,16 @@ function AssistantCard({ card, places, onSelectPlace }) {
         ) : (
           <p className="empty-state">{card.empty_text || '暂无结果'}</p>
         )}
-      </>
+      </div>
     )
   }
 
   if (card.card_type === 'itinerary') {
     return (
-      <>
+      <div className={wrapClass}>
         <div className="card-heading">
           <span>{card.feasible ? '行程推荐' : '行程提示'}</span>
-          <div className="flower">✿</div>
+          <div className="flower" aria-hidden="true"></div>
         </div>
         <h2>{card.title}</h2>
         {card.summary && <p className="assistant-subtitle">{card.summary}</p>}
@@ -454,16 +493,16 @@ function AssistantCard({ card, places, onSelectPlace }) {
             ))}
           </ol>
         )}
-      </>
+      </div>
     )
   }
 
   if (card.card_type === 'weather') {
     return (
-      <>
+      <div className={wrapClass}>
         <div className="card-heading">
           <span>天气参考</span>
-          <div className="flower">✿</div>
+          <div className="flower" aria-hidden="true"></div>
         </div>
         <h2>{card.title}</h2>
         <p className={`weather-source ${card.source_type === 'climate_reference' ? 'is-climate' : ''}`}>
@@ -483,7 +522,7 @@ function AssistantCard({ card, places, onSelectPlace }) {
             ))}
           </ul>
         )}
-      </>
+      </div>
     )
   }
 
