@@ -76,6 +76,22 @@ h2 { margin: 0 0 6px; color: #424469; font-size: 23px; letter-spacing: 1px; font
 .chat-bar input:focus { border-color: #9c8bb7; box-shadow: 0 0 0 3px #e9e3f0; }
 .chat-bar button { display: grid; width: 45px; height: 45px; place-items: center; border: 0; border-radius: 50%; background: linear-gradient(135deg, #8572ad, #5d6da0); color: white; box-shadow: 0 5px 12px rgba(80,86,139,.25); }
 .chat-bar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; transform: translate(-1px, 1px); }
+.chat-bar button:disabled { opacity: .55; cursor: not-allowed; }
+
+.chat-thread { display: flex; flex-direction: column; gap: 8px; max-height: 220px; margin: 10px 0 0; padding: 2px; overflow-y: auto; scrollbar-width: thin; }
+.chat-bubble { max-width: 92%; padding: 8px 12px; border-radius: 14px; font-size: 13px; line-height: 1.45; }
+.chat-bubble small { display: block; margin-bottom: 3px; font-size: 10px; letter-spacing: 1px; opacity: .75; }
+.chat-bubble p { margin: 0; white-space: pre-line; }
+.chat-bubble.is-user { align-self: flex-end; background: linear-gradient(135deg, #8572ad, #5d6da0); color: #fff; border-bottom-right-radius: 4px; }
+.chat-bubble.is-assistant { align-self: flex-start; border: 1px solid #e6dfe7; background: rgba(255,255,255,.88); color: #5d5a78; border-bottom-left-radius: 4px; }
+
+.assistant-subtitle { margin: -2px 0 8px; color: #8f82ac; font-size: 12px; }
+.assistant-place-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.assistant-place-list li { margin-bottom: 8px; }
+.assistant-place-list button { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 10px 12px; border: 1px solid #e5ddeb; border-radius: 12px; background: rgba(255,255,255,.75); text-align: left; }
+.assistant-place-list strong { color: #424469; font-size: 14px; font-weight: 600; }
+.assistant-place-list small { color: #8f82ac; font-size: 12px; line-height: 1.35; }
+.assistant-place-list em { color: #766f8d; font-size: 12px; font-style: normal; }
 
 /* 分类导航弹层 */
 .nav-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(45,42,65,.45); }

@@ -2,6 +2,52 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fetchCozePlaces } from './api/_lib/coze.js'
 import { fetchDriving } from './api/_lib/amap.js'
+import { handleChatRequest } from './api/chat.js'
+
+function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let data = ''
+    request.on('data', (chunk) => { data += chunk })
+    request.on('end', () => {
+      try {
+        resolve(data ? JSON.parse(data) : {})
+      } catch (error) {
+        reject(error)
+      }
+    })
+    request.on('error', reject)
+  })
+}
+
+/**
+ * 本地开发用中间件：与 api/chat.js（Vercel Function，生产环境入口）共用对话逻辑。
+ */
+function chatProxy(env) {
+  return {
+    name: 'chat-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/chat', async (request, response) => {
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+
+        if (request.method !== 'POST') {
+          response.statusCode = 405
+          response.end(JSON.stringify({ message: '仅支持 POST 请求' }))
+          return
+        }
+
+        try {
+          const body = await readJsonBody(request)
+          const result = await handleChatRequest(body, env)
+          response.statusCode = 200
+          response.end(JSON.stringify(result))
+        } catch (error) {
+          response.statusCode = error.statusCode || 500
+          response.end(JSON.stringify({ message: error.message || '对话请求失败' }))
+        }
+      })
+    },
+  }
+}
 
 /**
  * 本地开发用中间件：与 api/driving.js（Vercel Function，生产环境入口）
@@ -88,6 +134,7 @@ export default defineConfig(({ mode }) => {
       amapDrivingProxy({
         key: env.AMAP_KEY,
       }),
+      chatProxy(env),
     ],
     server: {
       host: true,

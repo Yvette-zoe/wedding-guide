@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import WeddingMap from './components/WeddingMap'
 import { buildAmapNavigationUrl, loadCozePlaces, loadDrivingDuration } from './data/poiProvider'
-import { attractionList, defaultHotel, itinerary, mapPlaces, transportHubs, weddingVenue } from './data/places'
+import { sendChatMessage } from './data/chatClient'
+import { attractionList, defaultHotel, mapPlaces, transportHubs, weddingVenue } from './data/places'
 import './style.css'
 
 const CATEGORY_CONFIG = {
@@ -13,9 +14,12 @@ const CATEGORY_CONFIG = {
 
 function App() {
   const [card, setCard] = useState(weddingVenue)
+  const [assistantCard, setAssistantCard] = useState(null)
+  const [chatMessages, setChatMessages] = useState([])
   const [places, setPlaces] = useState(mapPlaces)
   const [placesStatus, setPlacesStatus] = useState('loading')
-  const [input, setInput] = useState('利川一日游推荐')
+  const [input, setInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [focusPlaceId, setFocusPlaceId] = useState(weddingVenue.id)
   const [showQuickPicks, setShowQuickPicks] = useState(true)
@@ -64,6 +68,7 @@ function App() {
 
   const selectPlace = async (place, { focus = true, hidePicks = false } = {}) => {
     setLoading(false)
+    setAssistantCard(null)
     setCard(place)
     if (hidePicks || place?.placeType === 'attraction') {
       hideQuickPicks()
@@ -100,19 +105,48 @@ function App() {
   const openDetail = (place) => setDetailPlace(place)
   const closeDetail = () => setDetailPlace(null)
 
-  const send = () => {
-    if (!input.trim() || loading) return
-    setLoading(true)
+  const focusPlacesOnMap = (placeIds = []) => {
+    if (!placeIds.length) return
+    const first = places.find((item) => item.id === placeIds[0])
+    if (first?.coordinates) {
+      setFocusPlaceId(first.id)
+      mapRef.current?.focusPlace?.(first)
+    }
+  }
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || chatLoading) return
+
+    hideQuickPicks()
+    const nextMessages = [...chatMessages, { role: 'user', content: text }]
+    setChatMessages(nextMessages)
     setInput('')
-    setTimeout(() => {
-      setLoading(false)
-      setCard(itinerary)
-    }, 1000)
+    setChatLoading(true)
+
+    try {
+      const history = nextMessages.map(({ role, content }) => ({ role, content }))
+      const { reply, card: replyCard, focusPlaceIds } = await sendChatMessage(history)
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: reply, card: replyCard },
+      ])
+      if (replyCard) setAssistantCard(replyCard)
+      focusPlacesOnMap(focusPlaceIds)
+    } catch (error) {
+      console.error('对话失败：', error)
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: error.message || '对话请求失败，请稍后再试。' },
+      ])
+    } finally {
+      setChatLoading(false)
+    }
   }
 
   useEffect(() => {
     pageEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [loading, card])
+  }, [loading, card, chatMessages, chatLoading, assistantCard])
 
   return (
     <main className="page-shell">
@@ -159,9 +193,26 @@ function App() {
           />
         </section>
 
-        <section className={`info-card ${loading ? 'is-loading' : ''}`}>
-          {loading ? (
-            <div className="loading-state"><span></span><span></span><span></span><p>正在查询…</p></div>
+        {chatMessages.length > 0 && (
+          <section className="chat-thread" aria-label="对话记录">
+            {chatMessages.map((message, index) => (
+              <div key={`${message.role}-${index}`} className={`chat-bubble is-${message.role}`}>
+                <small>{message.role === 'user' ? '我' : '婚礼助手'}</small>
+                <p>{message.content}</p>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <section className={`info-card ${loading || chatLoading ? 'is-loading' : ''}`}>
+          {loading || chatLoading ? (
+            <div className="loading-state"><span></span><span></span><span></span><p>{chatLoading ? '助手思考中…' : '正在查询…'}</p></div>
+          ) : assistantCard ? (
+            <AssistantCard
+              card={assistantCard}
+              places={places}
+              onSelectPlace={(place) => selectPlace(place)}
+            />
           ) : (
             <>
               <div className="card-heading">
@@ -209,10 +260,11 @@ function App() {
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="问问利川的好风景…"
+            placeholder="例如：酒店到利川站多远？步行半小时有什么好吃的？"
             aria-label="输入旅游问题"
+            disabled={chatLoading}
           />
-          <button type="submit" aria-label="发送">
+          <button type="submit" aria-label="发送" disabled={chatLoading || !input.trim()}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4 3.3 13.9 20c-.3.7-1.3.7-1.6 0l-2.1-5.3-5.3-2.1c-.7-.3-.7-1.3 0-1.6L20.7 2c.6-.3 1 .6.7 1.3Z" /><path d="m10.1 14.6 4.7-4.7" /></svg>
           </button>
         </form>
@@ -304,10 +356,65 @@ function App() {
 }
 
 function InfoLine({ icon, label, value }) {
+  if (!value) return null
   return <div className="info-line">
     <span className="info-icon">{icon}</span>
     <div><small>{label}</small><p>{value}</p></div>
   </div>
+}
+
+/** 助手返回的结构化卡片（路程 / 地点列表） */
+function AssistantCard({ card, places, onSelectPlace }) {
+  if (card.card_type === 'route') {
+    return (
+      <>
+        <div className="card-heading">
+          <span>{card.mode_label || '路程'}查询</span>
+          <div className="flower">✿</div>
+        </div>
+        <h2>{card.title}</h2>
+        <InfoLine icon="◎" label="起点" value={card.origin_name} />
+        <InfoLine icon="◎" label="终点" value={card.destination_name} />
+        <InfoLine icon="⌁" label="距离" value={card.distance_text} />
+        <InfoLine icon="◷" label="时长" value={card.duration_text} />
+      </>
+    )
+  }
+
+  if (card.card_type === 'place_list') {
+    return (
+      <>
+        <div className="card-heading">
+          <span>推荐列表</span>
+          <div className="flower">✿</div>
+        </div>
+        <h2>{card.title}</h2>
+        {card.subtitle && <p className="assistant-subtitle">{card.subtitle}</p>}
+        {card.items?.length ? (
+          <ul className="assistant-place-list">
+            {card.items.map((item) => {
+              const place = places.find((p) => p.id === item.place_id || p.id === item.id)
+              return (
+                <li key={item.place_id || item.id || item.name}>
+                  <button type="button" onClick={() => place && onSelectPlace(place)}>
+                    <strong>{item.name}</strong>
+                    <small>
+                      {[item.duration_text, item.distance_text, item.address].filter(Boolean).join(' · ')}
+                    </small>
+                    {item.details && <em>{item.details}</em>}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="empty-state">{card.empty_text || '暂无结果'}</p>
+        )}
+      </>
+    )
+  }
+
+  return null
 }
 
 createRoot(document.getElementById('root')).render(<App />)
