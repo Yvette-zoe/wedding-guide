@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } f
 import * as echarts from 'echarts/core'
 import { MapChart, ScatterChart, EffectScatterChart, LinesChart } from 'echarts/charts'
 import { GeoComponent, TooltipComponent } from 'echarts/components'
+import { LabelLayout } from 'echarts/features'
 import { CanvasRenderer } from 'echarts/renderers'
 import { mapPlaces, weddingVenue } from '../data/places'
 
@@ -12,6 +13,7 @@ echarts.use([
   LinesChart,
   GeoComponent,
   TooltipComponent,
+  LabelLayout,
   CanvasRenderer,
 ])
 
@@ -117,17 +119,77 @@ function buildCityOutlineSeries(geoJson, tier) {
   }
 }
 
-/** 点击点位后的目标缩放（婚宴场地需更近，便于看到乡镇边界） */
+/** 点击点位后的目标缩放（城区酒店/餐厅需更大层级以拉开密集点位） */
 const FOCUS_ZOOM = {
   venue: 3.4,
   attraction: 2.8,
+  hotel: 40,
+  restaurant: 60,
   default: 2.6,
+}
+
+/** 达到该缩放后显示城区密集点位（餐厅）标签；150 倍时必显 */
+const DENSE_LABEL_ZOOM = 40
+
+/** 河流线宽随缩放增大：远景细、近景粗 */
+function getRiverWidth(zoom) {
+  if (zoom >= 20) return 8
+  if (zoom >= 8) return 4
+  if (zoom >= 3) return 1.5
+  return 0.5
+}
+
+/** 铁路线宽随缩放增大：远景细、近景粗 */
+function getRailwayWidth(zoom) {
+  if (zoom >= 20) return 6
+  if (zoom >= 8) return 4
+  if (zoom >= 3) return 2
+  return 1
 }
 
 function getFocusZoom(place) {
   if (place?.placeType === 'venue') return FOCUS_ZOOM.venue
   if (place?.placeType === 'attraction') return FOCUS_ZOOM.attraction
+  if (place?.placeType === 'hotel') return FOCUS_ZOOM.hotel
+  if (place?.placeType === 'restaurant') return FOCUS_ZOOM.restaurant
   return FOCUS_ZOOM.default
+}
+
+/** 按当前缩放切换餐厅标签：低倍隐藏防遮挡，高倍（含 150）显示 */
+function applyDensePlaceLabels(chart, zoom) {
+  const showDenseLabels = zoom >= DENSE_LABEL_ZOOM
+  chart.setOption({
+    series: [{
+      id: 'restaurants',
+      label: { show: showDenseLabels },
+      // 高倍时点位已拉开，关闭重叠隐藏，保证 150 倍能看到标签
+      labelLayout: { hideOverlap: !showDenseLabels },
+    }, {
+      id: 'hotels',
+      label: { show: true },
+      labelLayout: { hideOverlap: zoom < DENSE_LABEL_ZOOM },
+    }],
+  }, { lazyUpdate: true })
+}
+
+/** 按当前缩放更新河流宽度 */
+function applyRiverStyle(chart, zoom) {
+  chart.setOption({
+    series: [{
+      id: 'rivers',
+      lineStyle: { width: getRiverWidth(zoom) },
+    }],
+  }, { lazyUpdate: true })
+}
+
+/** 按当前缩放更新铁路宽度 */
+function applyRailwayStyle(chart, zoom) {
+  chart.setOption({
+    series: [{
+      id: 'railways',
+      lineStyle: { width: getRailwayWidth(zoom) },
+    }],
+  }, { lazyUpdate: true })
 }
 
 function setGeoView(chart, center, zoom, { centered = false } = {}) {
@@ -147,6 +209,9 @@ function setGeoView(chart, center, zoom, { centered = false } = {}) {
       show: tier <= 2,
     }],
   })
+  applyDensePlaceLabels(chart, zoom)
+  applyRiverStyle(chart, zoom)
+  applyRailwayStyle(chart, zoom)
 }
 
 function getViewTier(zoom) {
@@ -403,6 +468,45 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
         const geoJson = await response.json()
         if (disposed || !containerRef.current) return
 
+        // 加载清江及其支流（river 级别，不含细小溪流）
+        let rivers = []
+        try {
+          const riversRes = await fetch(`${import.meta.env.BASE_URL}maps/lichuan_rivers.json`)
+          if (riversRes.ok) {
+            const riversJson = await riversRes.json()
+            rivers = (riversJson.features || [])
+              .filter((f) => f.properties?.waterway === 'river')
+              .flatMap((f) => {
+                if (f.geometry.type === 'LineString') return [{ coords: f.geometry.coordinates, name: f.properties.name }]
+                if (f.geometry.type === 'MultiLineString') {
+                  return f.geometry.coordinates.map((line) => ({ coords: line, name: f.properties.name }))
+                }
+                return []
+              })
+          }
+        } catch (riverError) {
+          console.warn('水系数据加载失败，继续显示行政区图', riverError)
+        }
+
+        // 加载铁路线（重庆北-利川-恩施）
+        let railways = []
+        try {
+          const railwaysRes = await fetch(`${import.meta.env.BASE_URL}maps/railways.json`)
+          if (railwaysRes.ok) {
+            const railwaysJson = await railwaysRes.json()
+            railways = (railwaysJson.features || [])
+              .flatMap((f) => {
+                if (f.geometry.type === 'LineString') return [{ coords: f.geometry.coordinates, name: f.properties.name }]
+                if (f.geometry.type === 'MultiLineString') {
+                  return f.geometry.coordinates.map((line) => ({ coords: line, name: f.properties.name }))
+                }
+                return []
+              })
+          }
+        } catch (railwayError) {
+          console.warn('铁路数据加载失败，继续显示其他图层', railwayError)
+        }
+
         registerMap(geoJson)
         geoJsonRef.current = geoJson
         chart = echarts.init(containerRef.current, null, { renderer: 'canvas' })
@@ -417,6 +521,8 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
         const currentPlaces = placesRef.current
         const venuePlaces = currentPlaces.filter((place) => place.placeType === 'venue')
         const attractionPlaces = currentPlaces.filter((place) => place.placeType === 'attraction' && place.coordinates)
+        const hotelPlaces = currentPlaces.filter((place) => place.placeType === 'hotel' && place.coordinates)
+        const restaurantPlaces = currentPlaces.filter((place) => place.placeType === 'restaurant' && place.coordinates)
 
         chart.setOption({
           backgroundColor: 'transparent',
@@ -438,7 +544,8 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
               roam: true,
               zlevel: 0,
               center: mapCenter,
-              scaleLimit: { min: 0.8, max: 8 },
+              // 中心城区酒店/餐厅密集，最大可放到 150 倍以拉开点位并显示标签
+              scaleLimit: { min: 0.8, max: 150 },
               zoom: initialZoom,
               layoutCenter: ['50%', '52%'],
               layoutSize: '98%',
@@ -462,6 +569,73 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
           ],
           series: [
             buildCityOutlineSeries(geoJson, tierRef.current),
+            {
+              id: 'rivers',
+              name: '清江水系',
+              type: 'lines',
+              coordinateSystem: 'geo',
+              geoIndex: 0,
+              zlevel: 3,
+              silent: true,
+              polyline: true,
+              lineStyle: {
+                color: '#7db4d8',
+                width: 2.5,
+                opacity: 0.6,
+              },
+              data: rivers,
+            },
+            {
+              id: 'railways',
+              name: '铁路',
+              type: 'lines',
+              coordinateSystem: 'geo',
+              geoIndex: 0,
+              zlevel: 4,
+              silent: true,
+              polyline: true,
+              lineStyle: {
+                color: '#8b5a4e',
+                width: 2,
+                opacity: 0.6,
+                type: 'dashed',
+              },
+              data: railways,
+            },
+            {
+              id: 'transports',
+              name: '交通枢纽',
+              type: 'scatter',
+              coordinateSystem: 'geo',
+              geoIndex: 0,
+              zlevel: 5,
+              tooltip: { show: false },
+              symbol: 'circle',
+              symbolSize: 13,
+              itemStyle: {
+                color: '#4a7ba6',
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                shadowBlur: 6,
+                shadowColor: 'rgba(74,123,166,0.35)',
+              },
+              label: {
+                show: true,
+                position: 'right',
+                distance: 8,
+                formatter: '{b}',
+                color: '#2e5a80',
+                fontSize: 12,
+                fontWeight: 600,
+                backgroundColor: 'rgba(255,253,249,0.92)',
+                borderColor: '#8fb3d1',
+                borderWidth: 1,
+                borderRadius: 4,
+                padding: [3, 6],
+              },
+              labelLayout: { hideOverlap: false },
+              data: toScatterData(currentPlaces.filter((place) => place.placeType === 'transport')),
+            },
             {
               id: 'venues',
               name: '婚宴场地',
@@ -494,6 +668,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
                 borderRadius: 4,
                 padding: [3, 6],
               },
+              labelLayout: { hideOverlap: true },
               data: toScatterData(venuePlaces.length ? venuePlaces : [weddingVenue]),
             },
             {
@@ -525,7 +700,77 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
                 borderRadius: 4,
                 padding: [3, 6],
               },
+              labelLayout: { hideOverlap: true },
               data: toScatterData(attractionPlaces),
+            },
+            {
+              id: 'hotels',
+              name: '入住酒店',
+              type: 'scatter',
+              coordinateSystem: 'geo',
+              geoIndex: 0,
+              zlevel: 5,
+              tooltip: { show: false },
+              symbol: 'roundRect',
+              symbolSize: 12,
+              itemStyle: {
+                color: '#d58b5c',
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                shadowBlur: 6,
+                shadowColor: 'rgba(213,139,92,0.35)',
+              },
+              label: {
+                show: true,
+                position: 'right',
+                distance: 8,
+                formatter: '{b}',
+                color: '#80583f',
+                fontSize: 12,
+                backgroundColor: 'rgba(255,253,249,0.92)',
+                borderColor: '#deb99f',
+                borderWidth: 1,
+                borderRadius: 4,
+                padding: [3, 6],
+              },
+              labelLayout: { hideOverlap: true },
+              data: toScatterData(hotelPlaces),
+            },
+            {
+              id: 'restaurants',
+              name: '推荐餐厅',
+              type: 'scatter',
+              coordinateSystem: 'geo',
+              geoIndex: 0,
+              zlevel: 5,
+              tooltip: { show: false },
+              symbol: 'diamond',
+              symbolSize: 13,
+              itemStyle: {
+                color: '#5f9672',
+                borderColor: '#ffffff',
+                borderWidth: 2,
+                shadowBlur: 6,
+                shadowColor: 'rgba(95,150,114,0.35)',
+              },
+              label: {
+                show: false,
+                position: 'right',
+                distance: 8,
+                formatter: '{b}',
+                color: '#456b53',
+                fontSize: 12,
+                backgroundColor: 'rgba(255,253,249,0.92)',
+                borderColor: '#a8c6b2',
+                borderWidth: 1,
+                borderRadius: 4,
+                padding: [3, 6],
+              },
+              emphasis: {
+                label: { show: true },
+              },
+              labelLayout: { hideOverlap: true },
+              data: toScatterData(restaurantPlaces),
             },
             {
               id: 'pois',
@@ -566,9 +811,13 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
           if (viewRaf) cancelAnimationFrame(viewRaf)
           viewRaf = requestAnimationFrame(() => {
             if (!containerRef.current || !geoJsonRef.current) return
+            const zoom = getGeoZoom(chart, zoomRef.current)
             updateMapView(chart, containerRef.current, geoJsonRef.current, {
               zoomRef, tierRef, centerTownshipRef,
             })
+            applyDensePlaceLabels(chart, zoom)
+            applyRiverStyle(chart, zoom)
+            applyRailwayStyle(chart, zoom)
           })
         })
 
@@ -597,12 +846,18 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
     if (!chart || status !== 'ready') return
     const venuePlaces = places.filter((place) => place.placeType === 'venue')
     const attractionPlaces = places.filter((place) => place.placeType === 'attraction' && place.coordinates)
+    const hotelPlaces = places.filter((place) => place.placeType === 'hotel' && place.coordinates)
+    const restaurantPlaces = places.filter((place) => place.placeType === 'restaurant' && place.coordinates)
+    const transportPlaces = places.filter((place) => place.placeType === 'transport' && place.coordinates)
     const poiPlaces = places.filter((place) => place.placeType === 'poi' && place.coordinates)
 
     chart.setOption({
       series: [
         { id: 'venues', data: toScatterData(venuePlaces) },
         { id: 'attractions', data: toScatterData(attractionPlaces) },
+        { id: 'hotels', data: toScatterData(hotelPlaces) },
+        { id: 'restaurants', data: toScatterData(restaurantPlaces) },
+        { id: 'transports', data: toScatterData(transportPlaces) },
         { id: 'pois', data: toScatterData(poiPlaces) },
       ],
     })
@@ -631,8 +886,13 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
       <div ref={containerRef} className="echarts-map" role="img" aria-label="利川及恩施景点地图" />
       {status === 'loading' && <div className="map-status">地图加载中…</div>}
       {status === 'error' && <div className="map-status is-error">{errorText}</div>}
-      <div className="map-legend"><i></i> 婚礼场地 <b></b> 推荐景点</div>
-      <span className="zoom-tip">双指缩放 · 拖动平移</span>
+      <div className="map-legend">
+        <i></i> 婚礼场地
+        <b></b> 推荐景点
+        <em className="hotel-dot"></em> 入住酒店
+        <em className="restaurant-dot"></em> 推荐餐厅
+        <em className="transport-dot"></em> 交通枢纽
+      </div>
     </div>
   )
 })

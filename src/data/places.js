@@ -78,7 +78,76 @@ export const attractions = {
 
 export const attractionList = Object.values(attractions)
 
-export const mapPlaces = [weddingVenue, ...attractionList]
+/**
+ * 默认入住酒店（本地兜底数据，字段与扣子 hotels 表记录一致）
+ * 用于扣子 hotels 表加载失败/未返回数据时，保证地图与"交通枢纽→酒店驾车时长"功能不受影响。
+ */
+export const defaultHotel = createPlace({
+  id: 'default-hotel',
+  placeType: 'hotel',
+  type: '入住酒店',
+  title: '利川时代开元名都大酒店(滨江北路店)',
+  name: '利川时代开元名都大酒店(滨江北路店)',
+  coordinates: [108.953625, 30.285167],
+  address: '湖北省恩施土家族苗族自治州利川市都亭街道滨江北路99号(清江半岛旁)',
+  details: '婚礼宾客入住酒店',
+})
+
+/** 交通枢纽：利川站、恩施站、许家坪机场、重庆北站、江北机场 */
+export const transportHubs = [
+  createPlace({
+    id: 'lichuan-station',
+    placeType: 'transport',
+    type: '火车站',
+    title: '利川站',
+    name: '利川站',
+    coordinates: [108.9364, 30.2936],
+    address: '湖北省利川市南环大道',
+    details: '沪汉蓉高铁（宜万铁路）经停站',
+  }),
+  createPlace({
+    id: 'enshi-station',
+    placeType: 'transport',
+    type: '火车站',
+    title: '恩施站',
+    name: '恩施站',
+    coordinates: [109.4790, 30.2720],
+    address: '湖北省恩施市金桂大道',
+    details: '恩施州主要铁路客运站',
+  }),
+  createPlace({
+    id: 'xujiaping-airport',
+    placeType: 'transport',
+    type: '机场',
+    title: '恩施许家坪机场',
+    name: '许家坪机场',
+    coordinates: [109.4850, 30.3200],
+    address: '湖北省恩施市许家坪路',
+    details: '恩施州民用机场，可中转武汉、重庆等地',
+  }),
+  createPlace({
+    id: 'chongqing-north-station',
+    placeType: 'transport',
+    type: '火车站',
+    title: '重庆北站',
+    name: '重庆北站',
+    coordinates: [106.55, 29.61],
+    address: '重庆市渝北区龙头寺',
+    details: '西南地区铁路枢纽，可换乘高铁至利川方向',
+  }),
+  createPlace({
+    id: 'jiangbei-airport',
+    placeType: 'transport',
+    type: '机场',
+    title: '重庆江北国际机场',
+    name: '江北机场',
+    coordinates: [106.66, 29.72],
+    address: '重庆市渝北区两路街道',
+    details: '重庆主要民用机场，国内外航线丰富',
+  }),
+]
+
+export const mapPlaces = [weddingVenue, ...attractionList, defaultHotel, ...transportHubs]
 
 export const itinerary = {
   id: 'itinerary',
