@@ -13,11 +13,8 @@ const port = Number(process.env.PORT) || 9000
 
 app.use(express.json({ limit: '1mb' }))
 
-/** CloudBase 静态托管与 service 域名跨域访问 */
+/** OPTIONS 预检：具体 Access-Control-Allow-Origin 由 CloudBase 网关注入，此处不再重复设置避免「origin,*」导致浏览器拒收 */
 app.use((request, response, next) => {
-  response.setHeader('Access-Control-Allow-Origin', '*')
-  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (request.method === 'OPTIONS') {
     response.status(204).end()
     return
