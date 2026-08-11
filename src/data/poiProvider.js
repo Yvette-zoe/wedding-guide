@@ -88,6 +88,8 @@ export function mapCozeRecordToPlace(record, placeType, index = 0) {
       .filter(Boolean)
       .join(' · ')
     time = fields.open_time || ''
+    // 扣子景点表新增「简介 introduction」字段
+    description = String(fields.introduction || '').trim()
   } else if (placeType === 'restaurant') {
     details = [fields.cuisine, fields.per_capita_price && `人均：${fields.per_capita_price}`]
       .filter(Boolean)

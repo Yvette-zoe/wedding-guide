@@ -83,6 +83,8 @@ function mapCozeRecordToPlace(record, placeType, index = 0) {
       .filter(Boolean)
       .join(' · ')
     time = fields.open_time || ''
+    // 扣子景点表新增「简介 introduction」字段
+    description = String(fields.introduction || '').trim()
   } else if (placeType === 'restaurant') {
     details = [fields.cuisine, fields.per_capita_price && `人均：${fields.per_capita_price}`]
       .filter(Boolean)
@@ -226,6 +228,7 @@ export function buildPlacesSummary(places) {
     if (place.address) parts.push(`地址：${place.address}`)
     if (place.time) parts.push(`时间：${place.time}`)
     if (place.details) parts.push(place.details)
+    if (place.description) parts.push(`简介：${place.description}`)
     return parts.join('；')
   })
   return lines.join('\n')
