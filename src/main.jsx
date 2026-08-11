@@ -2,12 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import WeddingMap from './components/WeddingMap'
 import ChatHistoryPage from './components/ChatHistoryPage'
+import SplashScreen from './components/SplashScreen'
 import { buildAmapNavigationUrl, loadCozePlaces, loadDrivingDuration } from './data/poiProvider'
 import { sendChatMessage } from './data/chatClient'
 import { attractionList, defaultHotel, mapPlaces, transportHubs, weddingVenue } from './data/places'
+import '@fontsource/noto-serif-sc/400.css'
+import '@fontsource/noto-serif-sc/500.css'
+import '@fontsource/noto-serif-sc/600.css'
+import '@fontsource/noto-serif-sc/700.css'
+import '@fontsource/dm-serif-display/400.css'
 import './style.css'
 
 const CATEGORY_CONFIG = {
+  venue: { title: '婚宴场地', icon: '♡' },
   attraction: { title: '推荐景点', icon: '⌁' },
   restaurant: { title: '推荐餐厅', icon: '♨' },
   hotel: { title: '入住酒店', icon: '⌂' },
@@ -28,12 +35,13 @@ function App() {
   const [listPage, setListPage] = useState(null)
   const [detailPlace, setDetailPlace] = useState(null)
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
+  const [splashDone, setSplashDone] = useState(false)
   const mapRef = useRef(null)
 
   const hideQuickPicks = () => setShowQuickPicks(false)
 
   const placesByCategory = useMemo(() => {
-    const grouped = { attraction: [], restaurant: [], hotel: [] }
+    const grouped = { venue: [], attraction: [], restaurant: [], hotel: [] }
     places.forEach((place) => {
       if (grouped[place.placeType]) grouped[place.placeType].push(place)
     })
@@ -157,6 +165,7 @@ function App() {
 
   return (
     <main className="page-shell">
+      {!splashDone && <SplashScreen onFinish={() => setSplashDone(true)} />}
       <section className="app">
         <div className="app-top">
           <header className="topbar">
@@ -164,7 +173,7 @@ function App() {
               <button
                 className="nav-toggle"
                 type="button"
-                aria-label="打开分类导航"
+                aria-label="打开导航"
                 onClick={() => setNavOpen(true)}
               >
                 <span></span><span></span><span></span>
@@ -312,7 +321,7 @@ function App() {
         <div className="nav-overlay" onClick={() => setNavOpen(false)}>
           <nav className="nav-panel" onClick={(event) => event.stopPropagation()}>
             <div className="nav-panel-header">
-              <h3>分类导航</h3>
+              <h3>导航</h3>
               <button type="button" className="nav-close" onClick={() => setNavOpen(false)}>×</button>
             </div>
             <ul>
@@ -359,10 +368,14 @@ function App() {
       {detailPlace && (
         <div className="detail-overlay" onClick={closeDetail}>
           <div className="detail-card" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="detail-close" onClick={closeDetail}>×</button>
-            <div className="card-heading">
-              <span>{detailPlace.type}</span>
-              <div className="flower" aria-hidden="true"></div>
+            <div className="detail-card-top">
+              <div className="card-heading">
+                <span>{detailPlace.type}</span>
+              </div>
+              <div className="detail-card-actions">
+                <div className="flower" aria-hidden="true"></div>
+                <button type="button" className="detail-close" onClick={closeDetail} aria-label="关闭">×</button>
+              </div>
             </div>
             <h2>{detailPlace.title}</h2>
             <InfoLine icon="⌖" label="地址" value={detailPlace.address} />

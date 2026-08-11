@@ -26,12 +26,45 @@ const VIEW_ZOOM = {
 }
 
 /** 中等缩放时先显示的利川核心街道 */
-const LICHUAN_CORE_NAMES = new Set(['都亭街道', '东城街道'])
+const LICHUAN_CORE_NAMES = new Set(['都亭', '东城'])
 
 const LICHUAN_FILL = '#fdfdfc'
 const LICHUAN_BORDER = '#7066a0'
 const ENSHI_FILL = '#eef2f5'
 const ENSHI_BORDER = '#9995bc'
+const CHONGQING_URBAN_FILL = '#f3eef8'
+const CHONGQING_URBAN_BORDER = '#b5a0c8'
+const CHONGQING_SUBURBAN_FILL = '#e8eef2'
+const CHONGQING_SUBURBAN_BORDER = '#9ab0bc'
+/** 区县级行政区（同一缩放档位统一显示标签） */
+const COUNTY_LEVEL_REGIONS = new Set([
+  'enshi',
+  'lichuan',
+  'chongqing-urban',
+  'chongqing-suburban',
+])
+
+/** 区县级标签统一样式 */
+const COUNTY_LABEL_STYLE = {
+  color: '#9a95ad',
+  fontSize: 11,
+  fontWeight: 500,
+}
+
+/** 区县 hover/click 时不额外弹出名称标签或 tooltip */
+const REGION_EMPHASIS = {
+  label: { show: false },
+  tooltip: { show: false },
+}
+
+function attachRegionInteraction(style) {
+  if (style.silent) return style
+  return {
+    ...style,
+    tooltip: { show: false },
+    emphasis: { ...REGION_EMPHASIS, ...style.emphasis },
+  }
+}
 
 function registerMap(geoJson) {
   echarts.registerMap(MAP_NAME, geoJson)
@@ -221,9 +254,8 @@ function getViewTier(zoom) {
 }
 
 function shouldShowRegionLabel(regionLevel, name, tier) {
-  if (regionLevel === 'enshi') return tier >= 1
   if (regionLevel === 'lichuan-city') return false
-  if (regionLevel === 'lichuan') return tier >= 2
+  if (COUNTY_LEVEL_REGIONS.has(regionLevel)) return tier >= 1
   if (regionLevel === 'lichuan-township') {
     if (tier >= 3) return true
     if (tier >= 2 && LICHUAN_CORE_NAMES.has(name)) return true
@@ -275,7 +307,7 @@ function findTownshipAtViewportCenter(chart, container, geoJson) {
 
 function buildTownshipStyle(name, displayName, tier, centerTownshipName, showLabel) {
   if (tier === 1) {
-    return {
+    return attachRegionInteraction({
       name,
       itemStyle: {
         // 远景仅显示市界 union 填充，乡镇面透明避免与市界错位
@@ -284,10 +316,10 @@ function buildTownshipStyle(name, displayName, tier, centerTownshipName, showLab
         borderWidth: 0,
       },
       label: { show: false },
-    }
+    })
   }
   if (tier === 2) {
-    return {
+    return attachRegionInteraction({
       name,
       itemStyle: {
         areaColor: LICHUAN_FILL,
@@ -302,10 +334,10 @@ function buildTownshipStyle(name, displayName, tier, centerTownshipName, showLab
         fontWeight: 600,
         formatter: displayName,
       },
-    }
+    })
   }
   const isCenter = name === centerTownshipName
-  return {
+  return attachRegionInteraction({
     name,
     itemStyle: {
       areaColor: LICHUAN_FILL,
@@ -320,7 +352,7 @@ function buildTownshipStyle(name, displayName, tier, centerTownshipName, showLab
       fontWeight: isCenter ? 700 : 600,
       formatter: displayName,
     },
-  }
+  })
 }
 
 function buildRegionStyles(geoJson, zoom = 1.15, centerTownshipName = null) {
@@ -352,7 +384,43 @@ function buildRegionStyles(geoJson, zoom = 1.15, centerTownshipName = null) {
       return buildTownshipStyle(name, displayName, tier, centerTownshipName, showLabel)
     }
 
-    return {
+    if (level === 'chongqing-urban') {
+      return attachRegionInteraction({
+        name,
+        itemStyle: {
+          areaColor: CHONGQING_URBAN_FILL,
+          borderColor: CHONGQING_URBAN_BORDER,
+          borderWidth: 1,
+          borderType: 'dashed',
+          opacity: 0.9,
+        },
+        label: {
+          show: showLabel,
+          ...COUNTY_LABEL_STYLE,
+          formatter: displayName,
+        },
+      })
+    }
+
+    if (level === 'chongqing-suburban') {
+      return attachRegionInteraction({
+        name,
+        itemStyle: {
+          areaColor: CHONGQING_SUBURBAN_FILL,
+          borderColor: CHONGQING_SUBURBAN_BORDER,
+          borderWidth: 1,
+          borderType: 'dashed',
+          opacity: 0.88,
+        },
+        label: {
+          show: showLabel,
+          ...COUNTY_LABEL_STYLE,
+          formatter: displayName,
+        },
+      })
+    }
+
+    return attachRegionInteraction({
       name,
       itemStyle: {
         areaColor: ENSHI_FILL,
@@ -363,11 +431,10 @@ function buildRegionStyles(geoJson, zoom = 1.15, centerTownshipName = null) {
       },
       label: {
         show: showLabel,
-        color: '#a6a2b6',
-        fontSize: 11,
+        ...COUNTY_LABEL_STYLE,
         formatter: displayName,
       },
-    }
+    })
   })
 }
 
@@ -512,7 +579,9 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
         chart = echarts.init(containerRef.current, null, { renderer: 'canvas' })
         chartRef.current = chart
 
-        const initialZoom = 1.15
+        const initialZoom = geoJson.features?.some((f) => f.properties?.regionLevel?.startsWith('chongqing'))
+          ? 0.82
+          : 1.15
         const mapCenter = computeGeoCenter(geoJson)
         tierRef.current = getViewTier(initialZoom)
         zoomRef.current = initialZoom
@@ -535,6 +604,10 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
               if (params.seriesType === 'effectScatter' || params.seriesType === 'scatter') {
                 return null
               }
+              // 区县地块 hover/click 均不弹出名称 tooltip
+              if (params.componentType === 'geo' || params.componentSubType === 'map') {
+                return false
+              }
               return params.name || ''
             },
           },
@@ -542,6 +615,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
             {
               map: MAP_NAME,
               roam: true,
+              selectedMode: false,
               zlevel: 0,
               center: mapCenter,
               // 中心城区酒店/餐厅密集，最大可放到 150 倍以拉开点位并显示标签
@@ -556,6 +630,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
                 borderType: 'dashed',
               },
               label: { show: false },
+              tooltip: { show: false },
               emphasis: {
                 itemStyle: {
                   areaColor: '#f3eef8',
@@ -563,6 +638,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
                   borderWidth: 1.5,
                 },
                 label: { show: false },
+                tooltip: { show: false },
               },
               regions: buildRegionStyles(geoJson, initialZoom, null),
             },

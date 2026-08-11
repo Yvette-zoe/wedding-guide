@@ -7,9 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "build:map": "node scripts/build-map.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cloudbase:prepare": "node scripts/prepare-cloudbase.js",
+    "cloudbase:deploy:fn": "npm run cloudbase:prepare && tcb fn deploy wedding-api --httpFn --force --yes",
+    "cloudbase:deploy:hosting": "npm run build && tcb hosting deploy dist -e wedding-guide-d8gudujg9718cefbc"
   },
   "dependencies": {
+    "@fontsource/dm-serif-display": "^5.3.0",
+    "@fontsource/noto-serif-sc": "^5.3.0",
     "@vitejs/plugin-react": "latest",
     "echarts": "^6.1.0",
     "react": "latest",

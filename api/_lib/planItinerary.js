@@ -625,7 +625,7 @@ export function formatItineraryReply(result) {
 
   const header = `已为您规划${result.label}：${result.summary}`
   if (result.days?.length) {
-    return [header, ...assumptionLines, '详细分日安排见下方行程卡。'].filter(Boolean).join('\n\n')
+    return [header, ...assumptionLines].filter(Boolean).join('\n\n')
   }
 
   const stepLines = (result.steps || []).map((item) => `${item.time}  ${item.label}`)

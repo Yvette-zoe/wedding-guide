@@ -1,9 +1,10 @@
 /**
- * 组合恩施区县 + 可选利川乡镇 GeoJSON，生成 public/maps/wedding_map.json
+ * 组合恩施区县 + 利川乡镇 + 重庆行政区 GeoJSON，生成 public/maps/wedding_map.json
  * 使用方式：
  * 1. 将恩施区县数据放在 public/maps/enshi_counties.json
  * 2. （可选）从 geojson.hxkj.vip 下载利川乡镇边界，保存为 public/maps/lichuan_townships.json
- * 3. 运行：node scripts/build-map.js
+ * 3. （可选）重庆城区/郊县边界：public/maps/chongqing_urban.json、chongqing_suburban.json
+ * 4. 运行：node scripts/build-map.js
  */
 import fs from 'fs'
 import path from 'path'
@@ -16,29 +17,49 @@ const mapsDir = path.resolve(__dirname, '../public/maps')
 const enshiPath = path.join(mapsDir, 'enshi_counties.json')
 const townshipsPath = path.join(mapsDir, 'lichuan_townships.json')
 const lichuanCityPath = path.join(mapsDir, 'lichuan.json')
+const chongqingUrbanPath = path.join(mapsDir, 'chongqing_urban.json')
+const chongqingSuburbanPath = path.join(mapsDir, 'chongqing_suburban.json')
 const outPath = path.join(mapsDir, 'wedding_map.json')
 
 function loadJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+  // 兼容带 UTF-8 BOM 的 GeoJSON（如 Desktop 导出的文件）
+  const raw = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '')
+  return JSON.parse(raw)
 }
 
+/** 统一地图标签简称 */
 function getDisplayName(name, regionLevel) {
+  if (!name) return ''
+
   if (regionLevel === 'lichuan-township') {
-    return name.replace(/(街道|镇|乡)$/, '')
+    return name
+      .replace(/生态综合开发区$/, '')
+      .replace(/(街道|镇|乡)$/, '')
   }
+
+  // 忠县为专名，简称仍为「忠县」
+  if (name === '忠县') return '忠县'
+
   return name
     .replace(/土家族苗族自治县$/, '')
-    .replace(/(市|县)$/, '')
+    .replace(/苗族土家族自治县$/, '')
+    .replace(/土家族自治县$/, '')
+    .replace(/自治县$/, '')
+    .replace(/新区$/, '')
+    .replace(/(市|县|区)$/, '')
 }
 
 function normalizeFeature(feature, regionLevel) {
-  const name = feature.properties?.name || ''
+  const fullName = feature.properties?.name || ''
+  const displayName = getDisplayName(fullName, regionLevel)
   return {
     type: 'Feature',
     properties: {
       ...feature.properties,
+      fullName,
+      name: displayName,
       regionLevel,
-      displayName: getDisplayName(name, regionLevel),
+      displayName,
     },
     geometry: feature.geometry,
   }
@@ -103,6 +124,24 @@ if (hasTownships) {
   })
   console.log('未找到 lichuan_townships.json，使用恩施区县图并突出利川市。')
   console.log('后续可将乡镇 GeoJSON 保存为 public/maps/lichuan_townships.json 后重新运行本脚本。')
+}
+
+if (fs.existsSync(chongqingUrbanPath)) {
+  const chongqingUrban = loadJson(chongqingUrbanPath)
+  const urbanFeatures = (chongqingUrban.features || [chongqingUrban]).map((feature) =>
+    normalizeFeature(feature, 'chongqing-urban'),
+  )
+  features = features.concat(urbanFeatures)
+  console.log(`已合并重庆城区 ${urbanFeatures.length} 个区`)
+}
+
+if (fs.existsSync(chongqingSuburbanPath)) {
+  const chongqingSuburban = loadJson(chongqingSuburbanPath)
+  const suburbanFeatures = (chongqingSuburban.features || [chongqingSuburban]).map((feature) =>
+    normalizeFeature(feature, 'chongqing-suburban'),
+  )
+  features = features.concat(suburbanFeatures)
+  console.log(`已合并重庆郊县 ${suburbanFeatures.length} 个县`)
 }
 
 const output = { type: 'FeatureCollection', features }

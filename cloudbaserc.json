@@ -1,0 +1,21 @@
+{
+  "version": "2.0",
+  "envId": "wedding-guide-d8gudujg9718cefbc",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "wedding-api",
+      "type": "HTTP",
+      "timeout": 60,
+      "runtime": "Nodejs18.15",
+      "installDependency": true,
+      "handler": "index.main",
+      "ignore": [
+        "node_modules",
+        "node_modules/**",
+        ".git",
+        ".git/**"
+      ]
+    }
+  ]
+}
