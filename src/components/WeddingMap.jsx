@@ -161,8 +161,10 @@ const FOCUS_ZOOM = {
   default: 2.6,
 }
 
-/** 达到该缩放后显示城区密集点位（餐厅）标签；150 倍时必显 */
+/** 达到该缩放后显示城区密集点位（餐厅）标签 */
 const DENSE_LABEL_ZOOM = 40
+/** 更高倍时餐厅标签仍可能重叠，启用避让而非隐藏 */
+const RESTAURANT_LABEL_DODGE_ZOOM = 80
 
 /** 河流线宽随缩放增大：远景细、近景粗 */
 function getRiverWidth(zoom) {
@@ -188,15 +190,17 @@ function getFocusZoom(place) {
   return FOCUS_ZOOM.default
 }
 
-/** 按当前缩放切换餐厅标签：低倍隐藏防遮挡，高倍（含 150）显示 */
+/** 按当前缩放切换餐厅标签：低倍隐藏防遮挡，高倍显示；超密集区域用避让减少覆盖 */
 function applyDensePlaceLabels(chart, zoom) {
   const showDenseLabels = zoom >= DENSE_LABEL_ZOOM
   chart.setOption({
     series: [{
       id: 'restaurants',
       label: { show: showDenseLabels },
-      // 高倍时点位已拉开，关闭重叠隐藏，保证 150 倍能看到标签
-      labelLayout: { hideOverlap: !showDenseLabels },
+      // 高倍时优先错位避免互相覆盖；仍冲突才隐藏
+      labelLayout: showDenseLabels
+        ? { hideOverlap: zoom < RESTAURANT_LABEL_DODGE_ZOOM, moveOverlap: 'shiftY' }
+        : { hideOverlap: true },
     }, {
       id: 'hotels',
       label: { show: true },
@@ -618,8 +622,8 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
               selectedMode: false,
               zlevel: 0,
               center: mapCenter,
-              // 中心城区酒店/餐厅密集，最大可放到 150 倍以拉开点位并显示标签
-              scaleLimit: { min: 0.8, max: 150 },
+              // 中心城区酒店/餐厅密集，最大可放到 260 倍以拉开点位并显示标签
+              scaleLimit: { min: 0.8, max: 260 },
               zoom: initialZoom,
               layoutCenter: ['50%', '52%'],
               layoutSize: '98%',
@@ -684,7 +688,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
               type: 'scatter',
               coordinateSystem: 'geo',
               geoIndex: 0,
-              zlevel: 5,
+              zlevel: 7,
               tooltip: { show: false },
               symbol: 'circle',
               symbolSize: 13,
@@ -718,7 +722,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
               type: 'effectScatter',
               coordinateSystem: 'geo',
               geoIndex: 0,
-              zlevel: 5,
+              zlevel: 6,
               tooltip: { show: false },
               rippleEffect: {
                 brushType: 'stroke',
@@ -785,7 +789,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
               type: 'scatter',
               coordinateSystem: 'geo',
               geoIndex: 0,
-              zlevel: 5,
+              zlevel: 6,
               tooltip: { show: false },
               symbol: 'roundRect',
               symbolSize: 12,
