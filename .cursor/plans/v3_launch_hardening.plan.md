@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: v3-p2-static-fallback
     content: P2 静态兜底：API 连续失败切简易模式，预置婚礼信息/行程/距离/穿衣
-    status: pending
+    status: completed
   - id: v3-p2-backup-entry
     content: P2 备份入口：确认 GitHub Pages 纯静态站可用，写进邀请函 Plan B
     status: pending
@@ -242,9 +242,9 @@ DeepSeek 宕机、高德超限、Vercel 超时、扣子全挂 → 宾客打开�
 
 ### 验收标准
 
-- [ ] 断网或 mock `/api/chat` 500 时，3 次失败后自动进入简易模式
-- [ ] 简易模式下：婚礼信息、距离表、导航链接、预置行程均可读
-- [ ] 恢复网络后可选「重试连接助手」按钮
+- [x] 断网或 mock `/api/chat` 500 时，3 次失败后自动进入简易模式
+- [x] 简易模式下：婚礼信息、距离表、导航链接、预置行程均可读
+- [x] 恢复网络后可选「重试连接助手」按钮
 
 ---
 

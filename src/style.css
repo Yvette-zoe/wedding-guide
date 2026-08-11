@@ -187,6 +187,143 @@ h2 { margin: 0 0 4px; color: #424469; font-size: 20px; letter-spacing: 1px; font
   font-size: 13px;
   line-height: 1.5;
 }
+.invite-banner.is-fallback {
+  background: rgba(236, 240, 248, .95);
+  border-color: #c8d0e0;
+  color: #4a5568;
+}
+
+.fallback-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  overflow: auto;
+  background: rgba(255,255,255,.82);
+  border-radius: 16px;
+  border: 1px solid #e8e1ef;
+}
+.fallback-panel-head strong {
+  display: block;
+  font-size: 15px;
+  color: #595575;
+}
+.fallback-panel-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #8b8498;
+}
+.fallback-section {
+  border: 1px solid #ebe4f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255,255,255,.9);
+}
+.fallback-section-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: #595575;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.fallback-section-body {
+  padding: 0 12px 12px;
+  color: #5c5668;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.fallback-section-body p {
+  margin: 0 0 6px;
+}
+.fallback-section-body small {
+  display: inline-block;
+  min-width: 2.5em;
+  margin-right: 8px;
+  color: #9a93a6;
+}
+.fallback-note {
+  color: #8b8498 !important;
+  font-size: 12px !important;
+}
+.fallback-nav {
+  display: inline-flex;
+  margin: 6px 8px 0 0;
+}
+.fallback-nav.is-secondary {
+  background: rgba(255,255,255,.9);
+  color: #8572ad;
+  border: 1px solid #d9d0e4;
+}
+.fallback-distance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.fallback-distance-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0ebf4;
+}
+.fallback-distance-list li:last-child { border-bottom: 0; }
+.fallback-distance-list strong {
+  display: block;
+  font-size: 13px;
+  color: #595575;
+}
+.fallback-distance-list small {
+  color: #8b8498;
+  font-size: 12px;
+}
+.fallback-link {
+  flex-shrink: 0;
+  color: #8572ad;
+  font-size: 12px;
+  text-decoration: none;
+}
+.fallback-itinerary + .fallback-itinerary {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #ebe4f0;
+}
+.fallback-itinerary strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #595575;
+}
+.fallback-itinerary p {
+  margin: 0 0 6px;
+  color: #8b8498;
+  font-size: 12px;
+}
+.fallback-itinerary ol {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.fallback-itinerary li {
+  margin: 2px 0;
+}
+.fallback-retry {
+  margin-top: 4px;
+  height: 40px;
+  border: 0;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #8572ad, #5d6da0);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
 
 .chat-history-page { z-index: 105; max-width: 520px; margin: 0 auto; }
 .chat-history-header { flex-shrink: 0; }

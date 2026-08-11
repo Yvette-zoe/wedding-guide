@@ -3,9 +3,11 @@ import { createRoot } from 'react-dom/client'
 import WeddingMap from './components/WeddingMap'
 import ChatHistoryPage from './components/ChatHistoryPage'
 import SplashScreen from './components/SplashScreen'
+import FallbackPanel from './components/FallbackPanel'
 import { buildAmapNavigationUrl, loadCozePlaces, loadDrivingDuration } from './data/poiProvider'
-import { sendChatMessage } from './data/chatClient'
+import { ChatClientError, sendChatMessage } from './data/chatClient'
 import { syncInviteCodeFromUrl, verifyInviteCodeWithServer } from './data/inviteCode'
+import { CHAT_FAIL_THRESHOLD } from './data/staticFallback'
 import { attractionList, defaultHotel, mapPlaces, transportHubs, weddingVenue } from './data/places'
 import '@fontsource/noto-serif-sc/400.css'
 import '@fontsource/noto-serif-sc/500.css'
@@ -42,15 +44,20 @@ function App() {
     required: false,
     message: '',
   })
+  const [appMode, setAppMode] = useState('normal')
+  const [chatErrorCount, setChatErrorCount] = useState(0)
   const mapRef = useRef(null)
 
-  const chatAllowed = inviteAccess.status === 'allowed'
+  const isFallbackMode = appMode === 'fallback'
+  const chatAllowed = inviteAccess.status === 'allowed' && !isFallbackMode
   const chatDisabled = !chatAllowed || chatLoading
-  const invitePlaceholder = inviteAccess.status === 'denied'
-    ? '请使用新人分享的完整链接后再提问'
-    : inviteAccess.status === 'checking'
-      ? '正在验证访问权限…'
-      : '例如：酒店到利川站多远？步行半小时有什么好吃的？'
+  const invitePlaceholder = isFallbackMode
+    ? '助手暂时不可用，请查看上方备用信息'
+    : inviteAccess.status === 'denied'
+      ? '请使用新人分享的完整链接后再提问'
+      : inviteAccess.status === 'checking'
+        ? '正在验证访问权限…'
+        : '例如：酒店到利川站多远？步行半小时有什么好吃的？'
 
   const hideQuickPicks = () => setShowQuickPicks(false)
 
@@ -168,6 +175,12 @@ function App() {
     }
   }
 
+  const retryAssistant = () => {
+    setChatErrorCount(0)
+    setAppMode('normal')
+    setAssistantCard(null)
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || chatLoading || !chatAllowed) return
@@ -182,6 +195,7 @@ function App() {
     try {
       const history = nextMessages.map(({ role, content }) => ({ role, content }))
       const { reply, card: replyCard, focusPlaceIds } = await sendChatMessage(history)
+      setChatErrorCount(0)
       setChatMessages((prev) => [
         ...prev,
         { role: 'assistant', content: reply, card: replyCard },
@@ -190,9 +204,27 @@ function App() {
       focusPlacesOnMap(focusPlaceIds)
     } catch (error) {
       console.error('对话失败：', error)
+      const isServiceFailure = error instanceof ChatClientError
+        ? error.isServiceFailure
+        : true
+      // chatLoading 期间不可重复发送，用当前计数 +1 即可
+      const nextCount = isServiceFailure ? chatErrorCount + 1 : chatErrorCount
+      const shouldFallback = isServiceFailure && nextCount >= CHAT_FAIL_THRESHOLD
+
+      if (isServiceFailure) setChatErrorCount(nextCount)
+      if (shouldFallback) {
+        setAppMode('fallback')
+        setChatHistoryOpen(false)
+      }
+
       setChatMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: error.message || '对话请求失败，请稍后再试。' },
+        {
+          role: 'assistant',
+          content: shouldFallback
+            ? '助手连续多次无响应，已切换到简易模式。'
+            : (error.message || '对话请求失败，请稍后再试。'),
+        },
       ])
     } finally {
       setChatLoading(false)
@@ -267,6 +299,9 @@ function App() {
           </section>
 
           <section className="info-card-panel" aria-label="信息卡片">
+            {isFallbackMode ? (
+              <FallbackPanel onRetry={retryAssistant} />
+            ) : (
             <div className={`info-card ${loading || chatLoading ? 'is-loading' : ''}`}>
               {loading || chatLoading ? (
                 <div className="loading-state"><span></span><span></span><span></span><p>{chatLoading ? '正在思考中…' : '正在查询…'}</p></div>
@@ -313,10 +348,17 @@ function App() {
                 </>
               )}
             </div>
+            )}
           </section>
         </div>
 
-        {inviteAccess.status === 'denied' && (
+        {isFallbackMode && (
+          <div className="invite-banner is-fallback" role="status">
+            助手暂时不可用，已显示预置备用信息
+          </div>
+        )}
+
+        {inviteAccess.status === 'denied' && !isFallbackMode && (
           <div className="invite-banner" role="alert">
             {inviteAccess.message}
           </div>
