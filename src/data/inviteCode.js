@@ -1,6 +1,7 @@
 /**
  * 婚礼邀请码：从链接读取、本地缓存、服务端校验
  */
+import { apiUrl } from './apiBase'
 
 const STORAGE_KEY = 'wedding_invite_code'
 
@@ -37,7 +38,7 @@ export async function verifyInviteCodeWithServer(code = getStoredInviteCode()) {
   const params = new URLSearchParams()
   if (code) params.set('code', code)
 
-  const response = await fetch(`/api/verify-code?${params.toString()}`)
+  const response = await fetch(apiUrl(`/api/verify-code?${params.toString()}`))
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {

@@ -1,6 +1,7 @@
 /**
  * 婚礼助手对话 API 客户端
  */
+import { apiUrl } from './apiBase'
 import { getStoredInviteCode } from './inviteCode'
 
 /**
@@ -12,7 +13,7 @@ import { getStoredInviteCode } from './inviteCode'
 export async function sendChatMessage(messages, options = {}) {
   const invite_code = options.inviteCode ?? getStoredInviteCode()
 
-  const response = await fetch('/api/chat', {
+  const response = await fetch(apiUrl('/api/chat'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages, invite_code }),

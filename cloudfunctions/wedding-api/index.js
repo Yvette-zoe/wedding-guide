@@ -13,6 +13,32 @@ const port = Number(process.env.PORT) || 9000
 
 app.use(express.json({ limit: '1mb' }))
 
+/** CloudBase 静态托管与 service 域名跨域访问 */
+app.use((request, response, next) => {
+  response.setHeader('Access-Control-Allow-Origin', '*')
+  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  if (request.method === 'OPTIONS') {
+    response.status(204).end()
+    return
+  }
+  next()
+})
+
+/** API 根路径说明（避免直接打开 /api 出现难懂的 404） */
+function sendApiIndex(response) {
+  response.status(200).json({
+    service: 'wedding-api',
+    endpoints: [
+      'GET /api/verify-code?code=',
+      'GET /api/places?type=hotel|attraction|restaurant',
+      'GET /api/driving?origin=&destination=&code=',
+      'POST /api/chat',
+      'GET /api/health',
+    ],
+  })
+}
+
 /** 统一 JSON 错误响应 */
 function sendError(response, error) {
   const status = error.statusCode || 500
@@ -72,7 +98,9 @@ mountApi('post', ['/api/chat', '/chat'], async (request, response) => {
   }
 })
 
-app.get('/health', (_request, response) => {
+mountApi('get', ['/api', '/api/'], (_request, response) => sendApiIndex(response))
+
+mountApi('get', ['/api/health', '/health'], (_request, response) => {
   response.status(200).json({ ok: true, service: 'wedding-api' })
 })
 

@@ -2,6 +2,7 @@
  * 高德 POI / 导航扩展预留接口（本阶段不请求网络、不保存 Key）
  * 后续接入时，将 API 结果映射为 places.js 中的统一点位模型即可。
  */
+import { apiUrl } from './apiBase'
 import { getStoredInviteCode } from './inviteCode'
 import { createPlace } from './places'
 
@@ -113,7 +114,7 @@ export function mapCozeRecordToPlace(record, placeType, index = 0) {
 }
 
 async function loadCozePlaceType(placeType) {
-  const response = await fetch(`/api/places?type=${encodeURIComponent(placeType)}`)
+  const response = await fetch(`${apiUrl('/api/places')}?type=${encodeURIComponent(placeType)}`)
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
     throw new Error(payload.message || `${PLACE_TYPE_LABELS[placeType]}加载失败`)
@@ -219,7 +220,7 @@ export async function loadDrivingDuration(origin, destination) {
   const inviteCode = getStoredInviteCode()
   if (inviteCode) params.set('code', inviteCode)
 
-  const response = await fetch(`/api/driving?${params.toString()}`)
+  const response = await fetch(`${apiUrl('/api/driving')}?${params.toString()}`)
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
