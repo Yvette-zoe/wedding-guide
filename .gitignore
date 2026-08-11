@@ -5,6 +5,7 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.cloudbase
 # CloudBase 部署前同步的 api 副本，勿手改
 cloudfunctions/wedding-api/api/
 cloudfunctions/wedding-api/node_modules/
