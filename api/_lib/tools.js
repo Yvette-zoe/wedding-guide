@@ -11,6 +11,7 @@ import {
 } from './amap.js'
 import { loadPlacesCatalog, resolvePlaceByName } from './placesCatalog.js'
 import { buildItineraryCard, formatItineraryReply, planItinerary } from './planItinerary.js'
+import { lookupStaticDistance } from './staticDistances.js'
 import { buildWeatherCard, queryWeather } from './weather.js'
 
 /** OpenAI 兼容格式的工具定义 */
@@ -132,6 +133,13 @@ export async function createToolContext(env) {
   async function getRoute(originCoords, destCoords, mode = 'driving') {
     const cacheKey = `${originCoords.join(',')}-${destCoords.join(',')}-${mode}`
     if (routeCache.has(cacheKey)) return routeCache.get(cacheKey)
+
+    /** 优先命中预生成距离矩阵，减少高德实时调用 */
+    const staticHit = lookupStaticDistance(originCoords, destCoords, mode)
+    if (staticHit) {
+      routeCache.set(cacheKey, staticHit)
+      return staticHit
+    }
 
     const origin = coordsToAmap(originCoords)
     const destination = coordsToAmap(destCoords)

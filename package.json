@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:map": "node scripts/build-map.js",
+    "generate:distances": "node scripts/generate-distance-matrix.js",
     "preview": "vite preview",
     "cloudbase:prepare": "node scripts/prepare-cloudbase.js",
     "cloudbase:deploy:fn": "npm run cloudbase:prepare && tcb fn deploy wedding-api --httpFn --force --yes",
