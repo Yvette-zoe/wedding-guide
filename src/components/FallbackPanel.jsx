@@ -8,7 +8,7 @@ import {
 } from '../data/staticFallback'
 
 /** 助手不可用时的简易模式面板 */
-export default function FallbackPanel({ onRetry }) {
+export default function FallbackPanel({ onRetry, staticOnly = false }) {
   const [openId, setOpenId] = useState('wedding')
   const distanceRows = getFallbackDistanceRows()
 
@@ -20,7 +20,11 @@ export default function FallbackPanel({ onRetry }) {
     <section className="fallback-panel" aria-label="备用信息">
       <div className="fallback-panel-head">
         <strong>简易模式</strong>
-        <p>助手暂时不可用，以下为预置备用信息</p>
+        <p>
+          {staticOnly
+            ? '当前为备用静态页（无智能助手），可查看婚礼信息、距离与导航'
+            : '助手暂时不可用，以下为预置备用信息'}
+        </p>
       </div>
 
       <div className="fallback-section">

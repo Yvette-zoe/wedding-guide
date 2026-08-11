@@ -16,7 +16,7 @@ todos:
     status: completed
   - id: v3-p2-backup-entry
     content: P2 备份入口：确认 GitHub Pages 纯静态站可用，写进邀请函 Plan B
-    status: pending
+    status: completed
   - id: v3-qa-device
     content: 真机验收：iOS/Android 微信、长辈大字体、弱网/断网场景
     status: pending
@@ -253,9 +253,10 @@ DeepSeek 宕机、高德超限、Vercel 超时、扣子全挂 → 宾客打开�
 ### GitHub Pages Plan B
 
 - 仓库已有 `.github/workflows/deploy-pages.yml`，子路径 `VITE_BASE=/wedding-guide/`
-- **待确认**：Pages 是否仍在部署、链接是否可访问
-- 纯静态站 **无 `/api/chat`**，但地图 + 固定点位 + 导航仍可用
-- 可在邀请函写：「若智能助手无法使用，请打开 [备用链接]」
+- **已确认可用（2026-08-11）**：https://yvette-zoe.github.io/wedding-guide/
+  - `index.html` / `maps/wedding_map.json` / `data/distance-matrix.json` 均返回 200
+- 纯静态站 **无 `/api/chat`**：打开后自动进入简易模式（地图 + 预置信息 + 导航）
+- 邀请函文案见 [`docs/invitation-plan-b.md`](../../docs/invitation-plan-b.md)
 
 ### 真机测试清单
 

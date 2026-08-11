@@ -115,10 +115,13 @@ function App() {
       })
       .catch((error) => {
         if (cancelled) return
+        console.error('邀请码校验失败：', error)
+        // 后端不可达（GitHub Pages 纯静态 / 断网）：进入简易模式，地图与预置信息仍可用
+        setAppMode('fallback')
         setInviteAccess({
-          status: 'denied',
-          required: true,
-          message: error.message || '邀请码校验失败，请稍后重试',
+          status: 'static',
+          required: false,
+          message: '',
         })
       })
 
@@ -176,6 +179,8 @@ function App() {
   }
 
   const retryAssistant = () => {
+    // 纯静态站无后端，重试无意义，保持简易模式
+    if (inviteAccess.status === 'static') return
     setChatErrorCount(0)
     setAppMode('normal')
     setAssistantCard(null)
@@ -300,7 +305,10 @@ function App() {
 
           <section className="info-card-panel" aria-label="信息卡片">
             {isFallbackMode ? (
-              <FallbackPanel onRetry={retryAssistant} />
+              <FallbackPanel
+                onRetry={inviteAccess.status === 'static' ? null : retryAssistant}
+                staticOnly={inviteAccess.status === 'static'}
+              />
             ) : (
             <div className={`info-card ${loading || chatLoading ? 'is-loading' : ''}`}>
               {loading || chatLoading ? (
