@@ -130,6 +130,11 @@ h1 { margin: 0; font-size: 23px; letter-spacing: 2px; font-weight: 600; line-hei
 .info-card-panel {
   flex: 1 1 0; min-height: 0; overflow: hidden;
 }
+.info-card-panel.is-fallback {
+  display: flex; flex-direction: column;
+  border: 1px solid #e6dfe7; border-radius: 19px; background: rgba(255,255,255,.86);
+  box-shadow: 0 10px 24px rgba(96,82,123,.09);
+}
 .info-card {
   display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 10px 13px; border: 1px solid #e6dfe7; border-radius: 19px; background: rgba(255,255,255,.86);
   box-shadow: 0 10px 24px rgba(96,82,123,.09); overflow: hidden; transition: opacity .2s;
@@ -194,15 +199,17 @@ h2 { margin: 0 0 4px; color: #424469; font-size: 20px; letter-spacing: 1px; font
 }
 
 .fallback-panel {
+  flex: 1 1 auto;
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 12px 10px;
-  overflow: auto;
-  background: rgba(255,255,255,.82);
-  border-radius: 16px;
-  border: 1px solid #e8e1ef;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: transparent;
 }
 .fallback-panel-head strong {
   display: block;
@@ -215,6 +222,7 @@ h2 { margin: 0 0 4px; color: #424469; font-size: 20px; letter-spacing: 1px; font
   color: #8b8498;
 }
 .fallback-section {
+  flex-shrink: 0;
   border: 1px solid #ebe4f0;
   border-radius: 12px;
   overflow: hidden;
@@ -256,7 +264,7 @@ h2 { margin: 0 0 4px; color: #424469; font-size: 20px; letter-spacing: 1px; font
 }
 .fallback-nav {
   display: inline-flex;
-  margin: 6px 8px 0 0;
+  margin: 8px 10px 2px 0;
 }
 .fallback-nav.is-secondary {
   background: rgba(255,255,255,.9);
@@ -315,6 +323,7 @@ h2 { margin: 0 0 4px; color: #424469; font-size: 20px; letter-spacing: 1px; font
   margin: 2px 0;
 }
 .fallback-retry {
+  flex-shrink: 0;
   margin-top: 4px;
   height: 40px;
   border: 0;

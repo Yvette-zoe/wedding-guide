@@ -303,7 +303,7 @@ function App() {
             )}
           </section>
 
-          <section className="info-card-panel" aria-label="信息卡片">
+          <section className={`info-card-panel${isFallbackMode ? ' is-fallback' : ''}`} aria-label="信息卡片">
             {isFallbackMode ? (
               <FallbackPanel
                 onRetry={inviteAccess.status === 'static' ? null : retryAssistant}
