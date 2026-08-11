@@ -20,6 +20,8 @@ const WELCOME_MESSAGE = `你好，我是婚礼助手，可以帮你查这些信�
 export default function ChatHistoryPage({
   messages,
   chatLoading,
+  chatDisabled = false,
+  chatPlaceholder = '例如：酒店到利川站多远？步行半小时有什么好吃的？',
   input,
   onInputChange,
   onSend,
@@ -137,15 +139,15 @@ export default function ChatHistoryPage({
         <input
           value={input}
           onChange={(event) => onInputChange?.(event.target.value)}
-          placeholder="例如：酒店到利川站多远？步行半小时有什么好吃的？"
+          placeholder={chatPlaceholder}
           aria-label="输入旅游问题"
-          disabled={chatLoading}
+          disabled={chatDisabled}
         />
         <button
           type="submit"
           className="chat-send-btn"
           aria-label="发送"
-          disabled={chatLoading || !input.trim()}
+          disabled={chatDisabled || !input.trim()}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M21.4 3.3 13.9 20c-.3.7-1.3.7-1.6 0l-2.1-5.3-5.3-2.1c-.7-.3-.7-1.3 0-1.6L20.7 2c.6-.3 1 .6.7 1.3Z" />

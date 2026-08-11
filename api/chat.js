@@ -2,14 +2,19 @@
  * Vercel Serverless Function：/api/chat
  * DeepSeek 多轮对话 + 工具调用（路程查询、可达地点、地点列表）
  */
+import { assertInviteCode, AuthError } from './_lib/auth.js'
 import { runChat, ChatApiError } from './_lib/deepseek.js'
 
 export async function handleChatRequest(body, env) {
+  assertInviteCode(body?.invite_code, env)
+
   if (!body?.messages) {
     throw new ChatApiError('缺少 messages 参数', 400)
   }
   return runChat({ messages: body.messages, env })
 }
+
+export { AuthError }
 
 export default async function handler(request, response) {
   response.setHeader('Content-Type', 'application/json; charset=utf-8')

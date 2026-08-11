@@ -6,6 +6,7 @@ import express from 'express'
 import { handleChatRequest } from './api/chat.js'
 import { handlePlacesRequest } from './api/places.js'
 import { handleDrivingRequest } from './api/driving.js'
+import { handleVerifyCodeRequest } from './api/verify-code.js'
 
 const app = express()
 const port = Number(process.env.PORT) || 9000
@@ -46,6 +47,16 @@ mountApi('get', ['/api/driving', '/driving'], async (request, response) => {
   try {
     const body = await handleDrivingRequest(request.query, process.env)
     response.status(200).json(body)
+  } catch (error) {
+    sendError(response, error)
+  }
+})
+
+mountApi('get', ['/api/verify-code', '/verify-code'], async (request, response) => {
+  response.setHeader('Content-Type', 'application/json; charset=utf-8')
+  try {
+    const result = await handleVerifyCodeRequest(request.query, process.env)
+    response.status(200).json(result)
   } catch (error) {
     sendError(response, error)
   }

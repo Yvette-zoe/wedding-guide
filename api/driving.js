@@ -4,14 +4,17 @@
  * 避免同一逻辑维护两份。
  * handleDrivingRequest 同时供 CloudBase HTTP 云函数复用。
  */
+import { assertInviteCode } from './_lib/auth.js'
 import { fetchDriving } from './_lib/amap.js'
 
 /**
  * 查询两点驾车路径规划
- * @param {{ origin?: string, destination?: string }} query
+ * @param {{ origin?: string, destination?: string, code?: string }} query
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} env
  */
 export async function handleDrivingRequest(query, env) {
+  assertInviteCode(query?.code, env)
+
   const { origin, destination } = query || {}
   const key = env.AMAP_KEY
   return fetchDriving({ key, origin, destination })

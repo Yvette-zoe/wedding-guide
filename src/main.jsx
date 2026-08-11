@@ -5,6 +5,7 @@ import ChatHistoryPage from './components/ChatHistoryPage'
 import SplashScreen from './components/SplashScreen'
 import { buildAmapNavigationUrl, loadCozePlaces, loadDrivingDuration } from './data/poiProvider'
 import { sendChatMessage } from './data/chatClient'
+import { syncInviteCodeFromUrl, verifyInviteCodeWithServer } from './data/inviteCode'
 import { attractionList, defaultHotel, mapPlaces, transportHubs, weddingVenue } from './data/places'
 import '@fontsource/noto-serif-sc/400.css'
 import '@fontsource/noto-serif-sc/500.css'
@@ -36,7 +37,20 @@ function App() {
   const [detailPlace, setDetailPlace] = useState(null)
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
   const [splashDone, setSplashDone] = useState(false)
+  const [inviteAccess, setInviteAccess] = useState({
+    status: 'checking',
+    required: false,
+    message: '',
+  })
   const mapRef = useRef(null)
+
+  const chatAllowed = inviteAccess.status === 'allowed'
+  const chatDisabled = !chatAllowed || chatLoading
+  const invitePlaceholder = inviteAccess.status === 'denied'
+    ? '请使用新人分享的完整链接后再提问'
+    : inviteAccess.status === 'checking'
+      ? '正在验证访问权限…'
+      : '例如：酒店到利川站多远？步行半小时有什么好吃的？'
 
   const hideQuickPicks = () => setShowQuickPicks(false)
 
@@ -68,6 +82,37 @@ function App() {
         if (cancelled) return
         console.error('扣子地点数据加载失败：', error)
         setPlacesStatus('fallback')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const code = syncInviteCodeFromUrl()
+
+    verifyInviteCodeWithServer(code)
+      .then((result) => {
+        if (cancelled) return
+        if (!result.required || result.valid) {
+          setInviteAccess({ status: 'allowed', required: result.required, message: '' })
+          return
+        }
+        setInviteAccess({
+          status: 'denied',
+          required: true,
+          message: result.message || '请使用新人分享的完整链接',
+        })
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setInviteAccess({
+          status: 'denied',
+          required: true,
+          message: error.message || '邀请码校验失败，请稍后重试',
+        })
       })
 
     return () => {
@@ -125,7 +170,7 @@ function App() {
 
   const send = async () => {
     const text = input.trim()
-    if (!text || chatLoading) return
+    if (!text || chatLoading || !chatAllowed) return
 
     hideQuickPicks()
     const nextMessages = [...chatMessages, { role: 'user', content: text }]
@@ -271,15 +316,21 @@ function App() {
           </section>
         </div>
 
+        {inviteAccess.status === 'denied' && (
+          <div className="invite-banner" role="alert">
+            {inviteAccess.message}
+          </div>
+        )}
+
         <form className="chat-bar" onSubmit={(event) => { event.preventDefault(); send() }}>
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="例如：酒店到利川站多远？步行半小时有什么好吃的？"
+            placeholder={invitePlaceholder}
             aria-label="输入旅游问题"
-            disabled={chatLoading}
+            disabled={chatDisabled}
           />
-          <button type="submit" className="chat-send-btn" aria-label="发送" disabled={chatLoading || !input.trim()}>
+          <button type="submit" className="chat-send-btn" aria-label="发送" disabled={chatDisabled || !input.trim()}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4 3.3 13.9 20c-.3.7-1.3.7-1.6 0l-2.1-5.3-5.3-2.1c-.7-.3-.7-1.3 0-1.6L20.7 2c.6-.3 1 .6.7 1.3Z" /><path d="m10.1 14.6 4.7-4.7" /></svg>
           </button>
           <button
@@ -300,6 +351,8 @@ function App() {
         <ChatHistoryPage
           messages={chatMessages}
           chatLoading={chatLoading}
+          chatDisabled={chatDisabled}
+          chatPlaceholder={invitePlaceholder}
           input={input}
           onInputChange={setInput}
           onSend={send}

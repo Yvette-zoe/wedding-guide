@@ -1,8 +1,9 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fetchCozePlaces } from './api/_lib/coze.js'
-import { fetchDriving } from './api/_lib/amap.js'
 import { handleChatRequest } from './api/chat.js'
+import { handleDrivingRequest } from './api/driving.js'
+import { handleVerifyCodeRequest } from './api/verify-code.js'
 
 function readJsonBody(request) {
   return new Promise((resolve, reject) => {
@@ -50,10 +51,43 @@ function chatProxy(env) {
 }
 
 /**
+ * 本地开发用中间件：与 api/verify-code.js 共用校验逻辑
+ */
+function verifyCodeProxy(env) {
+  return {
+    name: 'verify-code-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/verify-code', async (request, response) => {
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+
+        if (request.method !== 'GET') {
+          response.statusCode = 405
+          response.end(JSON.stringify({ message: '仅支持 GET 请求' }))
+          return
+        }
+
+        try {
+          const requestUrl = new URL(request.url, 'http://localhost')
+          const result = await handleVerifyCodeRequest(
+            { code: requestUrl.searchParams.get('code') || '' },
+            env,
+          )
+          response.statusCode = 200
+          response.end(JSON.stringify(result))
+        } catch (error) {
+          response.statusCode = error.statusCode || 500
+          response.end(JSON.stringify({ message: error.message || '邀请码校验失败' }))
+        }
+      })
+    },
+  }
+}
+
+/**
  * 本地开发用中间件：与 api/driving.js（Vercel Function，生产环境入口）
  * 共用 api/_lib/amap.js 的请求逻辑，避免同一逻辑维护两份。
  */
-function amapDrivingProxy({ key }) {
+function amapDrivingProxy(env) {
   return {
     name: 'amap-driving-proxy',
     configureServer(server) {
@@ -68,9 +102,11 @@ function amapDrivingProxy({ key }) {
           }
 
           const requestUrl = new URL(request.url, 'http://localhost')
-          const origin = requestUrl.searchParams.get('origin')
-          const destination = requestUrl.searchParams.get('destination')
-          const body = await fetchDriving({ key, origin, destination })
+          const body = await handleDrivingRequest({
+            origin: requestUrl.searchParams.get('origin'),
+            destination: requestUrl.searchParams.get('destination'),
+            code: requestUrl.searchParams.get('code'),
+          }, env)
 
           response.statusCode = 200
           response.end(JSON.stringify(body))
@@ -131,9 +167,8 @@ export default defineConfig(({ mode }) => {
         token: env.COZE_PAT,
         workflowId: env.COZE_WF_LIST_PLACES || '7671226620824371235',
       }),
-      amapDrivingProxy({
-        key: env.AMAP_KEY,
-      }),
+      verifyCodeProxy(env),
+      amapDrivingProxy(env),
       chatProxy(env),
     ],
     server: {

@@ -176,6 +176,18 @@ h2 { margin: 0 0 4px; color: #424469; font-size: 20px; letter-spacing: 1px; font
 .chat-bar .chat-send-btn svg { transform: translate(-1px, 1px); }
 .chat-bar button:disabled { opacity: .55; cursor: not-allowed; }
 
+.invite-banner {
+  flex-shrink: 0;
+  margin: 8px 2px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 244, 230, .95);
+  border: 1px solid #f0d4a8;
+  color: #8a5a24;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .chat-history-page { z-index: 105; max-width: 520px; margin: 0 auto; }
 .chat-history-header { flex-shrink: 0; }
 .chat-history-main {
