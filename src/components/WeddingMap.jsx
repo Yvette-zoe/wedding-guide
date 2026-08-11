@@ -157,14 +157,15 @@ const FOCUS_ZOOM = {
   venue: 3.4,
   attraction: 2.8,
   hotel: 40,
-  restaurant: 60,
+  restaurant: 90,
   default: 2.6,
 }
 
 /** 达到该缩放后显示城区密集点位（餐厅）标签 */
 const DENSE_LABEL_ZOOM = 40
-/** 更高倍时餐厅标签仍可能重叠，启用避让而非隐藏 */
-const RESTAURANT_LABEL_DODGE_ZOOM = 80
+
+/** 餐厅标签交错方位，降低同侧重叠 */
+const RESTAURANT_LABEL_SIDES = ['right', 'left', 'top', 'bottom']
 
 /** 河流线宽随缩放增大：远景细、近景粗 */
 function getRiverWidth(zoom) {
@@ -190,17 +191,17 @@ function getFocusZoom(place) {
   return FOCUS_ZOOM.default
 }
 
-/** 按当前缩放切换餐厅标签：低倍隐藏防遮挡，高倍显示；超密集区域用避让减少覆盖 */
+/** 按当前缩放切换餐厅标签：低倍隐藏；高倍显示并用 shiftY 避让，仍冲突则隐藏 */
 function applyDensePlaceLabels(chart, zoom) {
   const showDenseLabels = zoom >= DENSE_LABEL_ZOOM
   chart.setOption({
     series: [{
       id: 'restaurants',
       label: { show: showDenseLabels },
-      // 高倍时优先错位避免互相覆盖；仍冲突才隐藏
-      labelLayout: showDenseLabels
-        ? { hideOverlap: zoom < RESTAURANT_LABEL_DODGE_ZOOM, moveOverlap: 'shiftY' }
-        : { hideOverlap: true },
+      labelLayout: {
+        hideOverlap: true,
+        moveOverlap: showDenseLabels ? 'shiftY' : false,
+      },
     }, {
       id: 'hotels',
       label: { show: true },
@@ -492,6 +493,26 @@ function toScatterData(places) {
     }))
 }
 
+/** 餐厅点位：按序号交错标签方位与距离，减少城区标签互压 */
+function toRestaurantScatterData(places) {
+  return places
+    .filter((place) => place.coordinates?.length === 2)
+    .map((place, index) => {
+      const side = RESTAURANT_LABEL_SIDES[index % RESTAURANT_LABEL_SIDES.length]
+      const ring = Math.floor(index / RESTAURANT_LABEL_SIDES.length)
+      return {
+        name: place.name,
+        value: [...place.coordinates, 1],
+        placeId: place.id,
+        placeType: place.placeType,
+        label: {
+          position: side,
+          distance: 8 + ring * 12,
+        },
+      }
+    })
+}
+
 const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPlaceId = null, onSelectPlace }, ref) {
   const containerRef = useRef(null)
   const chartRef = useRef(null)
@@ -688,7 +709,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
               type: 'scatter',
               coordinateSystem: 'geo',
               geoIndex: 0,
-              zlevel: 7,
+              zlevel: 8,
               tooltip: { show: false },
               symbol: 'circle',
               symbolSize: 13,
@@ -722,7 +743,7 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
               type: 'effectScatter',
               coordinateSystem: 'geo',
               geoIndex: 0,
-              zlevel: 6,
+              zlevel: 10,
               tooltip: { show: false },
               rippleEffect: {
                 brushType: 'stroke',
@@ -748,7 +769,8 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
                 borderRadius: 4,
                 padding: [3, 6],
               },
-              labelLayout: { hideOverlap: true },
+              // 婚宴标签始终显示，不因重叠被隐藏
+              labelLayout: { hideOverlap: false },
               data: toScatterData(venuePlaces.length ? venuePlaces : [weddingVenue]),
             },
             {
@@ -839,18 +861,21 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
                 distance: 8,
                 formatter: '{b}',
                 color: '#456b53',
-                fontSize: 12,
+                fontSize: 11,
                 backgroundColor: 'rgba(255,253,249,0.92)',
                 borderColor: '#a8c6b2',
                 borderWidth: 1,
                 borderRadius: 4,
-                padding: [3, 6],
+                padding: [2, 5],
               },
               emphasis: {
                 label: { show: true },
               },
-              labelLayout: { hideOverlap: true },
-              data: toScatterData(restaurantPlaces),
+              labelLayout: {
+                hideOverlap: true,
+                moveOverlap: 'shiftY',
+              },
+              data: toRestaurantScatterData(restaurantPlaces),
             },
             {
               id: 'pois',
@@ -933,12 +958,13 @@ const WeddingMap = forwardRef(function WeddingMap({ places = mapPlaces, focusPla
 
     chart.setOption({
       series: [
-        { id: 'venues', data: toScatterData(venuePlaces) },
         { id: 'attractions', data: toScatterData(attractionPlaces) },
+        { id: 'restaurants', data: toRestaurantScatterData(restaurantPlaces) },
         { id: 'hotels', data: toScatterData(hotelPlaces) },
-        { id: 'restaurants', data: toScatterData(restaurantPlaces) },
-        { id: 'transports', data: toScatterData(transportPlaces) },
         { id: 'pois', data: toScatterData(poiPlaces) },
+        { id: 'transports', data: toScatterData(transportPlaces) },
+        // 婚宴放最后更新，配合最高 zlevel 保证图标在最顶层
+        { id: 'venues', data: toScatterData(venuePlaces) },
       ],
     })
   }, [places, status])
