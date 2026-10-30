@@ -1,7 +1,11 @@
 /**
  * 婚礼助手访问控制：邀请码校验
  * 若未配置 WEDDING_INVITE_CODE，则跳过校验（便于本地开发）
+ *
+ * 公开完整版：Vercel 主站不要求宾客码。闸门关闭时直接放行，
+ * 下方比对逻辑保留，把 INVITE_GATE_ENABLED 改回 true 即恢复。
  */
+const INVITE_GATE_ENABLED = false
 
 export class AuthError extends Error {
   constructor(message, statusCode = 403) {
@@ -11,8 +15,9 @@ export class AuthError extends Error {
   }
 }
 
-/** 是否已启用邀请码（生产环境应配置 WEDDING_INVITE_CODE） */
+/** 是否已启用邀请码 */
 export function isInviteCodeRequired(env) {
+  if (!INVITE_GATE_ENABLED) return false
   return Boolean(String(env?.WEDDING_INVITE_CODE || '').trim())
 }
 
@@ -21,6 +26,10 @@ export function isInviteCodeRequired(env) {
  * @returns {{ valid: boolean, required: boolean, message?: string }}
  */
 export function verifyInviteCode(code, env) {
+  if (!INVITE_GATE_ENABLED) {
+    return { valid: true, required: false }
+  }
+
   const expected = String(env?.WEDDING_INVITE_CODE || '').trim()
   if (!expected) {
     return { valid: true, required: false }

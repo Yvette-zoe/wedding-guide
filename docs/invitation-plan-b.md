@@ -6,10 +6,10 @@
 
 ## Plan A（主入口 · 含智能助手）
 
-任选其一发给宾客（须带邀请码）：
+发给宾客（Vercel 为公开完整版，无需宾客码）：
 
 **Vercel（推荐）**  
-[https://wedding-guide-one.vercel.app/?code=YYS2026](https://wedding-guide-one.vercel.app/?code=YYS2026)
+[https://wedding-guide-one.vercel.app/](https://wedding-guide-one.vercel.app/)
 
 **腾讯云 CloudBase**  
 [https://wedding-guide-d8gudujg9718cefbc-1316380096.tcloudbaseapp.com/?code=YYS2026](https://wedding-guide-d8gudujg9718cefbc-1316380096.tcloudbaseapp.com/?code=YYS2026)
@@ -43,7 +43,7 @@
 ```
 【婚礼指南】
 主链接（含智能助手）：
-https://wedding-guide-d8gudujg9718cefbc-1316380096.tcloudbaseapp.com/?code=YYS2026
+https://wedding-guide-one.vercel.app/
 
 若打不开或助手异常，请用备用页（地图+导航+预置信息）：
 https://yvette-zoe.github.io/wedding-guide/
@@ -57,7 +57,7 @@ https://yvette-zoe.github.io/wedding-guide/
 
 ## 说明
 
-- Plan A 的 `YYS2026` 为婚礼邀请码，勿公开到无关渠道；链接请只发宾客群。
+- Plan A 为公开完整版，打开链接即可使用地图、导航和智能助手，不需要宾客码。
 - Plan B 为 GitHub Pages 自动部署，随 `main` 分支更新；纯前端，不含 API Key。
 - 婚礼当天建议同时把 Plan A、Plan B 写进邀请函或群公告。
 
