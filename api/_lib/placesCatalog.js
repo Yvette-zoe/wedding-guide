@@ -1,7 +1,7 @@
 /**
  * 服务端地点目录：静态点位 + 扣子数据库，支持按名称解析
  */
-import { fetchCozePlaces } from './coze.js'
+import { handlePlacesRequest } from '../places.js'
 import {
   defaultHotel,
   staticAttractions,
@@ -111,10 +111,8 @@ function mapCozeRecordToPlace(record, placeType, index = 0) {
 
 async function loadCozePlacesMerged(env) {
   const types = ['hotel', 'attraction', 'restaurant']
-  const token = env.COZE_PAT
-  const workflowId = env.COZE_WF_LIST_PLACES || '7671226620824371235'
   const results = await Promise.allSettled(
-    types.map((placeType) => fetchCozePlaces(placeType, { token, workflowId })),
+    types.map((placeType) => handlePlacesRequest({ type: placeType }, env)),
   )
 
   const places = []
@@ -122,14 +120,23 @@ async function loadCozePlacesMerged(env) {
 
   results.forEach((result, index) => {
     const placeType = types[index]
-    if (result.status === 'fulfilled') {
-      extractRecords(result.value.workflow)
+    if (result.status !== 'fulfilled') {
+      failedTypes.push(placeType)
+      return
+    }
+
+    const payload = result.value
+    const mapped = Array.isArray(payload.places) && payload.places.length
+      ? payload.places
+      : extractRecords(payload.workflow)
         .map((record, i) => mapCozeRecordToPlace(record, placeType, i))
         .filter(Boolean)
-        .forEach((place) => places.push(place))
-    } else {
+
+    if (!mapped.length) {
       failedTypes.push(placeType)
+      return
     }
+    places.push(...mapped)
   })
 
   return { places, failedTypes }

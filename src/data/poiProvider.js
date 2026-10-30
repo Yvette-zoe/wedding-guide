@@ -122,6 +122,10 @@ async function loadCozePlaceType(placeType) {
     throw new Error(payload.message || `${PLACE_TYPE_LABELS[placeType]}加载失败`)
   }
 
+  if (Array.isArray(payload.places) && payload.places.length) {
+    return payload.places
+  }
+
   return extractRecords(payload.workflow)
     .map((record, index) => mapCozeRecordToPlace(record, placeType, index))
     .filter(Boolean)

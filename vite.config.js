@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { fetchCozePlaces } from './api/_lib/coze.js'
+import { handlePlacesRequest } from './api/places.js'
 import { handleChatRequest } from './api/chat.js'
 import { handleDrivingRequest } from './api/driving.js'
 import { handleVerifyCodeRequest } from './api/verify-code.js'
@@ -121,9 +121,9 @@ function amapDrivingProxy(env) {
 
 /**
  * 本地开发用中间件：与 api/places.js（Vercel Function，生产环境入口）
- * 共用 api/_lib/coze.js 的请求逻辑，避免同一逻辑维护两份。
+ * 共用 api/places.js 的请求逻辑，避免同一逻辑维护两份。
  */
-function cozePlacesProxy({ token, workflowId }) {
+function cozePlacesProxy(env) {
   return {
     name: 'coze-places-proxy',
     configureServer(server) {
@@ -138,8 +138,10 @@ function cozePlacesProxy({ token, workflowId }) {
           }
 
           const requestUrl = new URL(request.url, 'http://localhost')
-          const placeType = requestUrl.searchParams.get('type')
-          const result = await fetchCozePlaces(placeType, { token, workflowId })
+          const result = await handlePlacesRequest(
+            { type: requestUrl.searchParams.get('type') },
+            env,
+          )
 
           response.statusCode = 200
           response.end(JSON.stringify(result))
@@ -163,10 +165,7 @@ export default defineConfig(({ mode }) => {
     base: env.VITE_BASE || '/',
     plugins: [
       react(),
-      cozePlacesProxy({
-        token: env.COZE_PAT,
-        workflowId: env.COZE_WF_LIST_PLACES || '7671226620824371235',
-      }),
+      cozePlacesProxy(env),
       verifyCodeProxy(env),
       amapDrivingProxy(env),
       chatProxy(env),

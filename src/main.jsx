@@ -294,11 +294,14 @@ function App() {
             />
             {showQuickPicks && (
               <div className="quick-picks" aria-label="推荐旅游地点">
-                {attractionList.map((place) => (
-                  <button key={place.id} type="button" onClick={() => selectPlace(place, { hidePicks: true })}>
-                    <span>⌁</span>{place.name}
-                  </button>
-                ))}
+                {attractionList.map((seed) => {
+                  const place = places.find((item) => item.placeType === 'attraction' && item.name === seed.name) || seed
+                  return (
+                    <button key={place.id} type="button" onClick={() => selectPlace(place, { hidePicks: true })}>
+                      <span>⌁</span>{place.name}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </section>
